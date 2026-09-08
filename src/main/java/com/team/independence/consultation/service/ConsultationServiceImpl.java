@@ -73,17 +73,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Override
     @Transactional(readOnly = true)
     public List<ConsultationCounselorReservationResponse> getCounselorReservations(Long counselorId) {
-        return consultationMapper.findByCounselorId(counselorId).stream()
-                .map(r -> ConsultationCounselorReservationResponse.builder()
-                        .reservationId(r.getReservationId())
-                        .userId(r.getUserId())
-                        .consultationType(r.getConsultationType().name())
-                        .category(r.getCategory().name())
-                        .reservationDate(r.getReservationDate())
-                        .reservationTime(r.getReservationTime())
-                        .status(r.getStatus().name())
-                        .build())
-                .collect(Collectors.toList());
+        return consultationMapper.findByCounselorId(counselorId);
     }
 
     @Override

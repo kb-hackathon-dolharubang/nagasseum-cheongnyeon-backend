@@ -1,6 +1,7 @@
 package com.team.independence.consultation.mapper;
 
 import com.team.independence.consultation.domain.ConsultationReservation;
+import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -18,8 +19,8 @@ public interface ConsultationMapper {
     /** 사용자 기준 상담 목록. 예약일 최신순. */
     List<ConsultationReservation> findByUserId(@Param("userId") Long userId);
 
-    /** 상담사 기준 상담 목록. 예정된 상담을 시간순으로 쓰기 쉽게 예약일시 오름차순. */
-    List<ConsultationReservation> findByCounselorId(@Param("counselorId") Long counselorId);
+    /** 상담사 기준 상담 목록. member를 조인해 신청자 이름까지 내려준다. 예약일시 오름차순. */
+    List<ConsultationCounselorReservationResponse> findByCounselorId(@Param("counselorId") Long counselorId);
 
     /** id로 상담 예약을 조회한다. 없으면 null. */
     ConsultationReservation findById(@Param("reservationId") Long reservationId);

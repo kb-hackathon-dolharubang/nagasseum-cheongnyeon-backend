@@ -45,13 +45,25 @@
         ORDER BY reservation_date DESC, reservation_time DESC
     </select>
 
-    <select id="findByCounselorId" resultMap="reservationMap">
-        SELECT reservation_id, user_id, counselor_id, consultation_type, category,
-               reservation_date, reservation_time, request_message,
-               consult_info_json, diagnosis_json, status, created_at, ended_at
-        FROM consultation_reservation
-        WHERE counselor_id = #{counselorId}
-        ORDER BY reservation_date ASC, reservation_time ASC
+    <resultMap id="counselorReservationMap"
+               type="com.team.independence.consultation.dto.ConsultationCounselorReservationResponse">
+        <id     property="reservationId"   column="reservation_id"/>
+        <result property="userId"          column="user_id"/>
+        <result property="userName"        column="user_name"/>
+        <result property="consultationType" column="consultation_type"/>
+        <result property="category"        column="category"/>
+        <result property="reservationDate" column="reservation_date"/>
+        <result property="reservationTime" column="reservation_time"/>
+        <result property="status"          column="status"/>
+    </resultMap>
+
+    <select id="findByCounselorId" resultMap="counselorReservationMap">
+        SELECT cr.reservation_id, cr.user_id, m.nickname AS user_name, cr.consultation_type,
+               cr.category, cr.reservation_date, cr.reservation_time, cr.status
+        FROM consultation_reservation cr
+        JOIN member m ON m.id = cr.user_id
+        WHERE cr.counselor_id = #{counselorId}
+        ORDER BY cr.reservation_date ASC, cr.reservation_time ASC
     </select>
 
     <select id="findById" resultMap="reservationMap">
