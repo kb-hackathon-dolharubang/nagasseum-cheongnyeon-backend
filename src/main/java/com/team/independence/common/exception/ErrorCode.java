@@ -62,6 +62,10 @@ public enum ErrorCode {
     // ===== 정책 POLICY_xxx =====
     POLICY_NOT_FOUND("POLICY_001", "정책을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
     POLICY_SYNC_FAILED("POLICY_002", "정책 동기화에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
+    POLICY_AI_ASSESSMENT_FAILED("POLICY_003", "AI 심사 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY),
+
+    // ===== AI 상담요약 SUMMARY_xxx =====
+    SUMMARY_AI_FAILED("SUMMARY_001", "AI 요약 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY),
 
     // ===== 매물 PROPERTY_xxx =====
     REGION_NOT_FOUND("PROPERTY_001", "존재하지 않는 지역 코드입니다.", HttpStatus.NOT_FOUND),
