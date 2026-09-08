@@ -56,7 +56,8 @@ public class PriceModelServiceImpl implements PriceModelService {
             throw new BusinessException(ErrorCode.REGION_NOT_FOUND);
         }
 
-        YearMonth end = YearMonth.now();
+        // 이달은 월 중 일부만 신고된 불완전 데이터 → 전달까지만 사용
+        YearMonth end = YearMonth.now().minusMonths(1);
         YearMonth start = end.minusMonths(WINDOW_MONTHS - 1);
         String startYm = start.format(YM);
         String endYm = end.format(YM);
@@ -136,7 +137,8 @@ public class PriceModelServiceImpl implements PriceModelService {
             throw new BusinessException(ErrorCode.REGION_NOT_FOUND);
         }
 
-        YearMonth end = YearMonth.now();
+        // 이달은 월 중 일부만 신고된 불완전 데이터 → 전달까지만 사용
+        YearMonth end = YearMonth.now().minusMonths(1);
         YearMonth start = end.minusMonths(WINDOW_MONTHS - 1);
         String startYm = start.format(YM);
         String endYm = end.format(YM);

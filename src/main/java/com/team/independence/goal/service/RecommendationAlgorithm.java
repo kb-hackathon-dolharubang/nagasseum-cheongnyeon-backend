@@ -58,10 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public interface RecommendationAlgorithm {
 
     /**
-     * 상위에서 한 번만 조회한 회원 재무 정보.
-     *
-     * <p>세 알고리즘이 공통으로 사용하는 자산·저축·대출 데이터를 상위 서비스에서 미리 계산해
-     * 전달한다. 알고리즘마다 동일한 DB 조회를 반복하는 것을 방지한다.
+     * 세 알고리즘이 공통으로 사용하는 자산, 저축, 대출 데이터를 상위 서비스에서 미리 계산해 전달한다.
+     * 알고리즘마다 동일한 DB 조회를 반복하는 것을 방지한다.
      */
     record MemberFinancialContext(
             AssetNetWorthBreakdown netWorth,
@@ -69,7 +67,7 @@ public interface RecommendationAlgorithm {
             List<LoanSchedule> loanSchedules,
             /**
              * 요청 한 건 내에서 알고리즘들이 공유하는 bulkMedian 캐시. key는 regionCode.
-             * Realistic이 시군구를 확정한 뒤 채우면 HoldOut이 같은 지역·기간의 반복 조회를 피한다.
+             * Realistic이 시군구를 확정한 뒤 채우면 HoldOut이 같은 지역, 기간의 반복 조회를 피한다.
              * 알고리즘들은 Phase 1 → Phase 2 순차라 락 없이 접근하지만, 방어적으로 ConcurrentHashMap을 쓴다.
              */
             Map<String, Map<String, RentMedianResponse>> bulkMediansCache) {
@@ -89,10 +87,22 @@ public interface RecommendationAlgorithm {
     }
 
     /**
-     * 평수 구간(평). 넓은 쪽이 앞이다.
+     * 평수 구간(평, 전용면적 기준). 넓은 쪽이 앞이다.
      *
-     * <p>사용자가 평수를 지정하지 않았을 때 후보군으로 쓰는 공유 버킷.
-     * 구간을 끊어 쓰는 이유는 범위를 넓게 잡으면 성격이 다른 매물이 한 median에 섞여 대표값의 의미가 흐려지기 때문이다.
+     * 국토부 전월세 실거래 API는 APT, 오피스텔, 연립다세대에 대해 전용면적(excluUseAr, ㎡)을 제공한다.
+     * rent_transaction.area 컬럼에는 이 전용면적(㎡)이 그대로 저장되며,
+     * 사용자가 입력하는 평수도 전용면적 기준으로 통일한다.
+     * (단독다가구는 API가 전용면적 대신 연면적을 제공하므로 같은 평수라도 실면적이 다름 — 별도 이슈)
+     *
+     * <p>구간 경계는 주거 정책 기준선에 맞춰 설정한다.
+     * <pre>
+     *   26 ~ 40평  85 ~ 132㎡  국민주택(85㎡) 초과: 중대형
+     *   20 ~ 25평  66 ~ 82㎡  국민주택(85㎡) 이하: 청약, 전세대출 주요 기준
+     *   15 ~ 19평  49 ~ 62㎡  전용 60㎡ 이하: 청년주거급여, 보금자리론 기준
+     *   10 ~ 14평  33 ~ 46㎡  소형 투룸
+     *   4 ~ 9평  13~ 29㎡  원룸
+     * </pre>
+     * 구간을 분리하는 이유는, 범위를 넓게 잡으면 규모가 다른 매물이 한 median에 섞여 대표값의 의미가 흐려지기 때문이다.
      */
     int[][] SIZE_BUCKETS = {{26, 40}, {20, 25}, {15, 19}, {10, 14}, {4, 9}};
 
@@ -111,11 +121,11 @@ public interface RecommendationAlgorithm {
 
     static String label(HousingType housingType) {
         switch (housingType) {
-            case APT:       return "아파트";
+            case APT: return "아파트";
             case ROW_HOUSE: return "연립다세대";
             case OFFICETEL: return "오피스텔";
-            case DETACHED:  return "단독다가구";
-            default:        return housingType.name();
+            case DETACHED: return "단독다가구";
+            default: return housingType.name();
         }
     }
 
