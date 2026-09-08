@@ -54,7 +54,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  *   <li>2년(T=24) 커버리지 ≥ 65% (장기 불확실성 반영 추가 완화)</li>
  * </ul>
  */
-// @Disabled("로컬 MySQL + MOLIT API 환경 전용")
+@Disabled("로컬 MySQL + MOLIT API 환경 전용")
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = RootConfig.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
