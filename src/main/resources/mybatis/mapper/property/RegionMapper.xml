@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.team.independence.property.mapper.RegionMapper">
+
+    <select id="findAllCodes" resultType="string">
+        SELECT code FROM region
+    </select>
+
+    <select id="findCodeBySidoAndSigungu" resultType="string">
+        SELECT code FROM region
+         WHERE sido = #{sido}
+           AND sigungu = #{sigungu}
+    </select>
+
+    <!-- code가 PK라 프리픽스 검색이 인덱스 레인지 스캔으로 처리된다. -->
+    <select id="findCodesBySidoPrefix" resultType="string">
+        SELECT code
+        FROM region
+        WHERE code LIKE CONCAT(#{sidoPrefix}, '%')
+        ORDER BY code
+    </select>
+
+    <!-- 같은 시도의 시군구는 모두 같은 sido 값을 가지므로 한 행만 읽으면 된다. -->
+    <select id="findSidoNameByPrefix" resultType="string">
+        SELECT sido
+        FROM region
+        WHERE code LIKE CONCAT(#{sidoPrefix}, '%')
+        LIMIT 1
+    </select>
+
+    <select id="findFullNameByCode" resultType="string">
+        SELECT full_name
+        FROM region
+        WHERE code = #{code}
+    </select>
+
+</mapper>

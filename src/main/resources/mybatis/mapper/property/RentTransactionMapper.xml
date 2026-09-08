@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.team.independence.property.mapper.RentTransactionMapper">
+
+    <insert id="insert" parameterType="com.team.independence.property.domain.RentTransaction">
+        INSERT INTO rent_transaction (
+            region_code, housing_type, dong_name, jibun, complex_name,
+            area, deal_type, deposit, monthly_rent, floor, build_year,
+            deal_ym, deal_day, contract_type, contract_term, json
+        ) VALUES (
+            #{regionCode}, #{housingType}, #{dongName}, #{jibun}, #{complexName},
+            #{area}, #{dealType}, #{deposit}, #{monthlyRent}, #{floor}, #{buildYear},
+            #{dealYm}, #{dealDay}, #{contractType}, #{contractTerm}, #{json}
+        )
+    </insert>
+
+    <insert id="insertBatch" parameterType="list">
+        INSERT INTO rent_transaction (
+            region_code, housing_type, dong_name, jibun, complex_name,
+            area, deal_type, deposit, monthly_rent, floor, build_year,
+            deal_ym, deal_day, contract_type, contract_term, json
+        ) VALUES
+        <foreach collection="list" item="r" separator=",">
+        (
+            #{r.regionCode}, #{r.housingType}, #{r.dongName}, #{r.jibun}, #{r.complexName},
+            #{r.area}, #{r.dealType}, #{r.deposit}, #{r.monthlyRent}, #{r.floor}, #{r.buildYear},
+            #{r.dealYm}, #{r.dealDay}, #{r.contractType}, #{r.contractTerm}, #{r.json}
+        )
+        </foreach>
+    </insert>
+
+    <!-- idx_rent_reload (region_code, deal_ym, housing_type)를 그대로 타는 구간 삭제.
+         재적재 트랜잭션의 첫 단계이며, 인덱스가 없으면 유닛마다 풀스캔이 된다. -->
+    <delete id="deleteByUnit">
+        DELETE FROM rent_transaction
+         WHERE region_code = #{regionCode}
+           AND deal_ym = #{dealYm}
+           AND housing_type = #{housingType}
+    </delete>
+
+    <!-- 가격 모델(μ, σ) 산출용 월별 (거래연월, 보증금, 면적) 조회
+         deposit = 0 이상치 제외. 월별 그룹핑, 중앙값 산출은 애플리케이션에서 처리 -->
+    <select id="findAmountsForPriceModel" resultType="com.team.independence.property.dto.MonthlyPricePoint">
+        SELECT deal_ym, deposit, area
+          FROM rent_transaction
+         WHERE region_code  = #{regionCode}
+           AND housing_type = #{housingType}
+           AND deal_type = #{dealType}
+           AND deal_ym BETWEEN #{startYm} AND #{endYm}
+           AND area BETWEEN #{areaMinSqm} AND #{areaMaxSqm}
+           AND deposit &gt; 0
+         ORDER BY deal_ym
+    </select>
+
+    <!-- 배치 PriceModel 조회: (주거유형, 거래유형) 쌍 목록 + 지역·기간을 받아 5개 SIZE_BUCKETS 합집합에
+         해당하는 원본 (deal_ym, deposit, area) 행을 한 번에 반환한다. 조합별 버킷 분리·월별 중앙값 산출은
+         서비스에서 한다. RealisticAlgorithm·HoldOutAlgorithm이 40조합 × 개별 쿼리 대신 이 한 방으로 대체.
+         (housing_type, deal_type)를 IN으로 묶으면 idx_rent_query를 조합별 서브레인지로 그대로 탄다. -->
+    <select id="findAmountsForPriceModelBatch" resultType="com.team.independence.property.dto.PriceModelBatchRow">
+        SELECT housing_type, deal_type, deal_ym, deposit, area
+          FROM rent_transaction
+         WHERE region_code = #{regionCode}
+           AND (housing_type, deal_type) IN
+               <foreach collection="typePairs" item="p" open="(" separator="," close=")">
+                   (#{p.housingType}, #{p.dealType})
+               </foreach>
+           AND deal_ym BETWEEN #{startYm} AND #{endYm}
+           AND deposit &gt; 0
+           AND (   area BETWEEN 13 AND 29
+                OR area BETWEEN 33 AND 46
+                OR area BETWEEN 49 AND 62
+                OR area BETWEEN 66 AND 82
+                OR area BETWEEN 85 AND 132)
+         ORDER BY deal_ym
+    </select>
+
+    <!-- MySQL 8.0 윈도우 함수로 분위값을 DB에서 직접 계산해 1행으로 반환한다.
+         deposit = 0 이상치 제외. 조건에 맞는 데이터가 없으면 sampleCount=null인 1행이 반환된다.
+         시도 요청이어도 LIKE가 아니라 IN(시군구 목록)으로 받는다. LIKE는 region_code가 범위 조건이
+         되어 뒤따르는 housing_type·deal_type·deal_ym을 인덱스 키로 못 쓰고 시도 전체를 훑지만,
+         IN은 코드별 등치 조건이라 조합마다 idx_rent_query 서브레인지 스캔으로 좁혀진다. -->
+    <select id="findAggregatedMedian" resultType="com.team.independence.property.dto.MedianAggResult">
+        SELECT
+            MAX(CASE WHEN dep_rn  = CEIL(0.25 * total) THEN deposit      END) AS deposit_q1,
+            MAX(CASE WHEN dep_rn  = CEIL(0.50 * total) THEN deposit      END) AS deposit_q2,
+            MAX(CASE WHEN dep_rn  = CEIL(0.75 * total) THEN deposit      END) AS deposit_q3,
+            MAX(CASE WHEN rent_rn = CEIL(0.25 * total) THEN monthly_rent END) AS rent_q1,
+            MAX(CASE WHEN rent_rn = CEIL(0.50 * total) THEN monthly_rent END) AS rent_q2,
+            MAX(CASE WHEN rent_rn = CEIL(0.75 * total) THEN monthly_rent END) AS rent_q3,
+            MAX(total) AS sample_count
+        FROM (
+            SELECT deposit, monthly_rent,
+                   ROW_NUMBER() OVER (ORDER BY deposit)      AS dep_rn,
+                   ROW_NUMBER() OVER (ORDER BY monthly_rent) AS rent_rn,
+                   COUNT(*)     OVER ()                      AS total
+              FROM rent_transaction
+             WHERE region_code IN
+                   <foreach collection="regionCodes" item="code" open="(" separator="," close=")">
+                       #{code}
+                   </foreach>
+               AND housing_type = #{request.housingType}
+               AND deal_type    = #{request.dealType}
+               AND deal_ym      BETWEEN #{startYm} AND #{endYm}
+               AND area         BETWEEN #{areaMinSqm} AND #{areaMaxSqm}
+               AND deposit      BETWEEN #{request.depositMin} AND #{request.depositMax}
+               AND deposit &gt; 0
+            <if test="request.usesMonthlyRentFilter() and request.monthlyRentMin != null">
+               AND monthly_rent &gt;= #{request.monthlyRentMin}
+            </if>
+            <if test="request.usesMonthlyRentFilter() and request.monthlyRentMax != null">
+               AND monthly_rent &lt;= #{request.monthlyRentMax}
+            </if>
+        ) t
+    </select>
+
+    <!-- 시군구 코드 목록의 보증금·월세 중앙값을 단일 쿼리로 반환한다.
+         LIKE '시도%' 전체 스캔 대신 IN(코드 목록)을 사용해 idx_rent_query 인덱스를
+         region_code별로 개별 탄다(25개 sub-range scan → 1회 왕복).
+         RealisticAlgorithm.selectRegion()에서 N번 개별 조회를 대체한다. -->
+    <select id="findMediansByRegionCodes" resultType="com.team.independence.property.dto.SigunguMedianResult">
+        SELECT region_code,
+               MAX(CASE WHEN dep_rn  = CEIL(0.50 * total) THEN deposit      END) AS deposit_median,
+               MAX(CASE WHEN rent_rn = CEIL(0.50 * total) THEN monthly_rent END) AS rent_median,
+               MAX(total) AS sample_count
+          FROM (
+               SELECT region_code, deposit, monthly_rent,
+                      ROW_NUMBER() OVER (PARTITION BY region_code ORDER BY deposit)      AS dep_rn,
+                      ROW_NUMBER() OVER (PARTITION BY region_code ORDER BY monthly_rent) AS rent_rn,
+                      COUNT(*)     OVER (PARTITION BY region_code)                       AS total
+                 FROM rent_transaction
+                WHERE region_code IN
+                      <foreach collection="sigunguCodes" item="code" open="(" separator="," close=")">
+                          #{code}
+                      </foreach>
+                  AND housing_type = #{housingType}
+                  AND deal_type    = #{dealType}
+                  AND deal_ym      BETWEEN #{startYm} AND #{endYm}
+                  AND area         BETWEEN #{areaMinSqm} AND #{areaMaxSqm}
+                  AND deposit      BETWEEN #{depositMin} AND #{depositMax}
+                  AND deposit &gt; 0
+               <if test="monthlyRentMin != null">
+                  AND monthly_rent &gt;= #{monthlyRentMin}
+               </if>
+               <if test="monthlyRentMax != null">
+                  AND monthly_rent &lt;= #{monthlyRentMax}
+               </if>
+          ) t
+         GROUP BY region_code
+    </select>
+
+    <!-- 배치 bulk median: 지역·기간을 공유하는 여러 (주거유형, 거래유형) 쌍을 한 번에 조회한다.
+         (housing_type, deal_type) IN (...)이 idx_rent_query 서브레인지를 조합별로 그대로 태우므로
+         이전 8쿼리 순차 방식과 처리 행 수는 동일하고 왕복 오버헤드만 사라진다.
+         평수 버킷 경계(평 → ㎡ floor 환산): 4p=13, 9p=29 / 10p=33, 14p=46 / 15p=49, 19p=62
+                                              20p=66, 25p=82 / 26p=85, 40p=132
+         버킷 사이 공백(area 30-32, 47-48, 63-65, 83-84)은 WHERE 절에서 제외한다. -->
+    <select id="findBulkMedianBatch" resultType="com.team.independence.property.dto.BulkMedianResult">
+        SELECT
+            housing_type,
+            deal_type,
+            bucket_min AS area_min,
+            CASE bucket_min
+                WHEN 4  THEN 9  WHEN 10 THEN 14 WHEN 15 THEN 19
+                WHEN 20 THEN 25 WHEN 26 THEN 40
+            END AS area_max,
+            MAX(CASE WHEN dep_rn  = CEIL(0.25 * total) THEN deposit      END) AS deposit_q1,
+            MAX(CASE WHEN dep_rn  = CEIL(0.50 * total) THEN deposit      END) AS deposit_q2,
+            MAX(CASE WHEN dep_rn  = CEIL(0.75 * total) THEN deposit      END) AS deposit_q3,
+            MAX(CASE WHEN rent_rn = CEIL(0.25 * total) THEN monthly_rent END) AS rent_q1,
+            MAX(CASE WHEN rent_rn = CEIL(0.50 * total) THEN monthly_rent END) AS rent_q2,
+            MAX(CASE WHEN rent_rn = CEIL(0.75 * total) THEN monthly_rent END) AS rent_q3,
+            MAX(total) AS sample_count
+        FROM (
+            SELECT
+                housing_type, deal_type, deposit, monthly_rent,
+                CASE
+                    WHEN area BETWEEN 13 AND 29  THEN 4
+                    WHEN area BETWEEN 33 AND 46  THEN 10
+                    WHEN area BETWEEN 49 AND 62  THEN 15
+                    WHEN area BETWEEN 66 AND 82  THEN 20
+                    WHEN area BETWEEN 85 AND 132 THEN 26
+                END AS bucket_min,
+                ROW_NUMBER() OVER (
+                    PARTITION BY housing_type, deal_type,
+                        CASE WHEN area BETWEEN 13 AND 29  THEN 4
+                             WHEN area BETWEEN 33 AND 46  THEN 10
+                             WHEN area BETWEEN 49 AND 62  THEN 15
+                             WHEN area BETWEEN 66 AND 82  THEN 20
+                             WHEN area BETWEEN 85 AND 132 THEN 26
+                        END
+                    ORDER BY deposit
+                ) AS dep_rn,
+                ROW_NUMBER() OVER (
+                    PARTITION BY housing_type, deal_type,
+                        CASE WHEN area BETWEEN 13 AND 29  THEN 4
+                             WHEN area BETWEEN 33 AND 46  THEN 10
+                             WHEN area BETWEEN 49 AND 62  THEN 15
+                             WHEN area BETWEEN 66 AND 82  THEN 20
+                             WHEN area BETWEEN 85 AND 132 THEN 26
+                        END
+                    ORDER BY monthly_rent
+                ) AS rent_rn,
+                COUNT(*) OVER (
+                    PARTITION BY housing_type, deal_type,
+                        CASE WHEN area BETWEEN 13 AND 29  THEN 4
+                             WHEN area BETWEEN 33 AND 46  THEN 10
+                             WHEN area BETWEEN 49 AND 62  THEN 15
+                             WHEN area BETWEEN 66 AND 82  THEN 20
+                             WHEN area BETWEEN 85 AND 132 THEN 26
+                        END
+                ) AS total
+              FROM rent_transaction
+             WHERE region_code IN
+                   <foreach collection="regionCodes" item="code" open="(" separator="," close=")">
+                       #{code}
+                   </foreach>
+               AND (housing_type, deal_type) IN
+                   <foreach collection="typePairs" item="p" open="(" separator="," close=")">
+                       (#{p.housingType}, #{p.dealType})
+                   </foreach>
+               AND deposit &gt; 0
+               AND deal_ym BETWEEN #{startYm} AND #{endYm}
+               AND (   area BETWEEN 13 AND 29
+                    OR area BETWEEN 33 AND 46
+                    OR area BETWEEN 49 AND 62
+                    OR area BETWEEN 66 AND 82
+                    OR area BETWEEN 85 AND 132)
+        ) t
+        GROUP BY housing_type, deal_type, bucket_min
+    </select>
+
+</mapper>
