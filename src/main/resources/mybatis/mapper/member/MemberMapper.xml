@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  ★ 도메인별로 XML을 분리한다 (git 충돌 최소화).
+    각자 자기 도메인 폴더의 XML만 수정할 것.
+-->
+<mapper namespace="com.team.independence.member.mapper.MemberMapper">
+
+    <resultMap id="memberMap" type="com.team.independence.member.domain.Member">
+        <id     property="id"                     column="id"/>
+        <result property="kakaoId"                column="kakao_id"/>
+        <result property="nickname"               column="nickname"/>
+        <result property="birthDate"              column="birth_date"/>
+        <result property="incomeBracket"          column="income_bracket"/>
+        <result property="incomeBracketUpdatedAt" column="income_bracket_updated_at"/>
+        <result property="monthlyIncome"          column="monthly_income"/>
+        <result property="occupationType"         column="occupation_type"/>
+        <result property="createdAt"              column="created_at"/>
+        <result property="updatedAt"              column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" parameterType="long" resultMap="memberMap">
+        SELECT id, kakao_id, nickname, birth_date,
+               income_bracket, income_bracket_updated_at,
+               monthly_income, occupation_type,
+               created_at, updated_at
+          FROM member
+         WHERE id = #{id}
+    </select>
+
+    <!-- DSR 한도 계산용. monthly_income만 쓰지만 회원 존재 여부를 구분해야 해 id를 함께 읽는다. -->
+    <select id="findIncomeById" parameterType="long" resultMap="memberMap">
+        SELECT id, monthly_income
+          FROM member
+         WHERE id = #{id}
+    </select>
+
+    <select id="findByKakaoId" parameterType="string" resultMap="memberMap">
+        SELECT id, kakao_id, nickname, birth_date,
+               income_bracket, income_bracket_updated_at,
+               monthly_income, occupation_type,
+               created_at, updated_at
+          FROM member
+         WHERE kakao_id = #{kakaoId}
+    </select>
+
+    <update id="update" parameterType="com.team.independence.member.domain.Member">
+        UPDATE member
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="incomeBracket != null">
+                income_bracket = #{incomeBracket},
+                income_bracket_updated_at = NOW(),
+            </if>
+            <if test="monthlyIncome != null">monthly_income = #{monthlyIncome},</if>
+            <if test="occupationType != null">occupation_type = #{occupationType},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <insert id="insert" parameterType="com.team.independence.member.domain.Member" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO member (kakao_id, nickname, birth_date, income_bracket, created_at, updated_at)
+        VALUES (#{kakaoId}, #{nickname}, #{birthDate}, #{incomeBracket}, NOW(), NOW())
+    </insert>
+
+</mapper>
