@@ -254,7 +254,8 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
         String dealYm = dto.getDealYear().trim()
             + String.format("%02d", Integer.parseInt(dto.getDealMonth().trim()));
 
-        // 4종마다 면적 필드명이 다름 (excluUseAr / totalFloorAr) → DTO 헬퍼로 통일
+        // APT / 오피스텔 / 연립다세대: excluUseAr(전용면적, ㎡) 저장
+        // 단독다가구: API가 전용면적을 제공하지 않아 totalFloorAr(연면적, ㎡) 저장
         String area = dto.getAreaValue();
 
         return RentTransaction.builder()
