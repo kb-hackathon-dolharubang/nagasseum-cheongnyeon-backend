@@ -40,6 +40,18 @@
            AND housing_type = #{housingType}
     </delete>
 
+    <!-- walk-forward 백테스팅 조합 탐색: 기간 내 거래 월 수가 minDistinctMonths 이상인 조합만 반환.
+         area·deposit 필터 없이 combo 전체 기준으로 카운트하고, 버킷별 표본 검증은 Java에서 처리한다. -->
+    <select id="findDistinctCombosForBacktest" resultType="com.team.independence.property.dto.BacktestComboRow">
+        SELECT region_code, housing_type, deal_type
+          FROM rent_transaction
+         WHERE deal_ym  BETWEEN #{startYm} AND #{endYm}
+           AND deposit &gt; 0
+         GROUP BY region_code, housing_type, deal_type
+        HAVING COUNT(DISTINCT deal_ym) &gt;= #{minDistinctMonths}
+         ORDER BY region_code, housing_type, deal_type
+    </select>
+
     <!-- 가격 모델(μ, σ) 산출용 월별 (거래연월, 보증금, 면적) 조회
          deposit = 0 이상치 제외. 월별 그룹핑, 중앙값 산출은 애플리케이션에서 처리 -->
     <select id="findAmountsForPriceModel" resultType="com.team.independence.property.dto.MonthlyPricePoint">

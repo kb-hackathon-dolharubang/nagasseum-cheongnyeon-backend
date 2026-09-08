@@ -3,6 +3,7 @@ package com.team.independence.property.mapper;
 import com.team.independence.property.domain.DealType;
 import com.team.independence.property.domain.HousingType;
 import com.team.independence.property.domain.RentTransaction;
+import com.team.independence.property.dto.BacktestComboRow;
 import com.team.independence.property.dto.BulkMedianResult;
 import com.team.independence.property.dto.MedianAggResult;
 import com.team.independence.property.dto.MonthlyPricePoint;
@@ -71,6 +72,15 @@ public interface RentTransactionMapper {
             @Param("depositMax") long depositMax,
             @Param("monthlyRentMin") Long monthlyRentMin,
             @Param("monthlyRentMax") Long monthlyRentMax);
+
+    /**
+     * walk-forward 백테스팅용 조합 탐색.
+     * 기간 내에 {@code minDistinctMonths}개 이상의 월에 거래가 있는 (지역, 주거유형, 거래유형) 조합을 반환한다.
+     */
+    List<BacktestComboRow> findDistinctCombosForBacktest(
+            @Param("startYm") String startYm,
+            @Param("endYm") String endYm,
+            @Param("minDistinctMonths") int minDistinctMonths);
 
     /** 가격 모델(μ, σ) 산출용 월별 (거래연월, 보증금, 면적) 목록. 보증금 0 제외 */
     List<MonthlyPricePoint> findAmountsForPriceModel(@Param("regionCode") String regionCode,
