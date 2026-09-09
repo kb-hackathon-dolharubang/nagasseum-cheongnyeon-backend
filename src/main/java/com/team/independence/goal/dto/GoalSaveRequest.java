@@ -29,7 +29,7 @@ public class GoalSaveRequest {
     private String propertyType;
 
     @NotBlank
-    @Pattern(regexp = "JEONSE|WOLSE")
+    @Pattern(regexp = "JEONSE|WOLSE|TRADE")
     private String tradeType;
 
     @NotNull

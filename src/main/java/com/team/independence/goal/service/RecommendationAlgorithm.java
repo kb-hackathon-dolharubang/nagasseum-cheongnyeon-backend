@@ -130,7 +130,12 @@ public interface RecommendationAlgorithm {
     }
 
     static String label(DealType dealType) {
-        return dealType == DealType.JEONSE ? "전세" : "월세";
+        switch (dealType) {
+            case JEONSE: return "전세";
+            case WOLSE:  return "월세";
+            case TRADE:  return "매매";
+            default: return dealType.name();
+        }
     }
 
     /** 배수의 분모다. 0이 되면 나눗셈이 깨지므로 최소 1개월로 본다. */

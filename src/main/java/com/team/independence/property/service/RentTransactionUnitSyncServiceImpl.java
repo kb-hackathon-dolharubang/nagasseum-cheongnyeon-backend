@@ -22,9 +22,11 @@ public class RentTransactionUnitSyncServiceImpl implements RentTransactionUnitSy
     @Override
     @Transactional
     public void sync(String regionCode, String dealYm, HousingType housingType,
-                     List<RentTransaction> items) {
+                     List<RentTransaction> items, boolean isTrade) {
 
-        int deleted = rentTransactionMapper.deleteByUnit(regionCode, dealYm, housingType);
+        int deleted = isTrade
+                ? rentTransactionMapper.deleteTradeByUnit(regionCode, dealYm, housingType)
+                : rentTransactionMapper.deleteByUnit(regionCode, dealYm, housingType);
 
         // MySQL은 빈 VALUES 목록을 문법 오류로 처리한다. 거래가 없는 구간은 삭제만 하고 끝낸다.
         if (!items.isEmpty()) {
@@ -37,11 +39,12 @@ public class RentTransactionUnitSyncServiceImpl implements RentTransactionUnitSy
             .regionCode(regionCode)
             .dealYm(dealYm)
             .housingType(housingType)
+            .dealCategory(isTrade ? "TRADE" : "RENT")
             .isSuccess(true)
             .insertedCnt(items.size())
             .build());
 
-        log.debug("[국토부] 재적재 완료 - regionCode={}, dealYm={}, housingType={}, deleted={}, inserted={}",
-            regionCode, dealYm, housingType, deleted, items.size());
+        log.debug("[국토부] 재적재 완료 - regionCode={}, dealYm={}, housingType={}, category={}, deleted={}, inserted={}",
+            regionCode, dealYm, housingType, isTrade ? "TRADE" : "RENT", deleted, items.size());
     }
 }
