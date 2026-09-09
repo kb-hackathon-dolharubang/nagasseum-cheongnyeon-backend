@@ -27,76 +27,110 @@ class ChatSummaryServiceImplTest {
 
     private GeminiClient gemini;
     private ChatSummaryServiceImpl service;
+    private final ObjectMapper om = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @BeforeEach
     void setUp() {
         gemini = mock(GeminiClient.class);
-        ObjectMapper om = new ObjectMapper().registerModule(new JavaTimeModule());
         service = new ChatSummaryServiceImpl(gemini, new SummaryPromptBuilder(), om);
     }
 
     private SummaryRequest anyRequest() {
-        // 리플렉션 없이도 되도록 Jackson 으로 만든다.
         try {
-            ObjectMapper om = new ObjectMapper().registerModule(new JavaTimeModule());
-            return om.readValue(
-                    "{\"messages\":[{\"role\":\"USER\",\"text\":\"안녕하세요\"}]}",
-                    SummaryRequest.class);
+            return om.readValue("""
+                    {
+                      "reservationId": 12,
+                      "consultationType": "GENERAL",
+                      "category": "HOUSING",
+                      "consultInfo": {
+                        "housingPreference": {
+                          "province": "서울특별시", "district": "마포구", "neighborhood": "서교동",
+                          "housingType": "OFFICETEL", "transactionType": "JEONSE",
+                          "areaRange": { "min": 10, "max": 20, "label": "10~20평" }
+                        },
+                        "currentAsset": 45000000, "monthlySaving": 900000,
+                        "targetDate": "2031-08", "loanPreference": "UNDECIDED"
+                      },
+                      "messages": [
+                        { "senderType": "USER", "content": "희망 조건을 유지하고 싶어요.", "createdAt": "2026-09-09T14:01:00" },
+                        { "senderType": "COUNSELOR", "content": "목표 시점 조정도 방법입니다.", "createdAt": "2026-09-09T14:02:00" }
+                      ]
+                    }
+                    """, SummaryRequest.class);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
     @Test
-    @DisplayName("정상 JSON → 리포트 파싱 (느슨한 스키마: summary 필수, 나머지 optional)")
+    @DisplayName("정상 JSON → 5필드 파싱")
     void parsesReport() {
         when(gemini.generateJson(any(), any(), any())).thenReturn("""
                 {
-                  "summary": "전세 자금 마련 상담을 진행했습니다.",
-                  "housingGoal": "2년 내 전세 보증금 1억 마련",
-                  "discussedConditions": ["예산 범위", "희망 지역"],
-                  "actionItems": [
-                    {"who": "USER", "task": "청약통장 납입 내역 정리"},
-                    {"who": "COUNSELOR", "task": "지역 시세 자료 준비"}
-                  ],
-                  "nextSteps": "다음 상담에서 대출 한도 검토"
+                  "summary": "현재 자산과 희망 조건을 기준으로 목표 달성 가능성을 검토했습니다.",
+                  "mainConcerns": ["희망 조건 유지 가능 여부", "목표 시점 유지 가능 여부"],
+                  "discussionPoints": ["현재 자산과 필요 금액 비교", "희망 조건 예상 비용"],
+                  "result": "월 저축액을 높이거나 목표 시점을 조정할 필요가 있습니다.",
+                  "recommendations": ["월 저축액 조정 검토", "목표 시점 조정 검토"]
                 }
                 """);
 
         SummaryReport r = service.summarize(anyRequest());
 
-        assertThat(r.getSummary()).contains("전세 자금");
-        assertThat(r.getHousingGoal()).contains("1억");
-        assertThat(r.getDiscussedConditions()).containsExactly("예산 범위", "희망 지역");
-        assertThat(r.getActionItems()).hasSize(2);
-        assertThat(r.getActionItems().get(0).getWho()).isEqualTo("USER");
-        assertThat(r.getNextSteps()).contains("대출 한도");
+        assertThat(r.getSummary()).contains("목표 달성 가능성");
+        assertThat(r.getMainConcerns()).hasSize(2);
+        assertThat(r.getDiscussionPoints()).containsExactly("현재 자산과 필요 금액 비교", "희망 조건 예상 비용");
+        assertThat(r.getResult()).contains("목표 시점");
+        assertThat(r.getRecommendations()).containsExactly("월 저축액 조정 검토", "목표 시점 조정 검토");
     }
 
     @Test
-    @DisplayName("summary 만 있고 나머지 비어도 OK (억지 채움 방지)")
-    void summaryOnly() {
+    @DisplayName("summary·result 만 있고 배열은 비어도 OK (억지 채움 방지)")
+    void requiredOnly() {
         when(gemini.generateJson(any(), any(), any())).thenReturn(
-                "{\"summary\":\"짧은 인사만 오간 대화입니다.\",\"discussedConditions\":[],\"actionItems\":[]}");
+                "{\"summary\":\"짧은 상담입니다.\",\"result\":\"추가 논의가 필요합니다.\","
+                + "\"mainConcerns\":[],\"discussionPoints\":[],\"recommendations\":[]}");
 
         SummaryReport r = service.summarize(anyRequest());
 
         assertThat(r.getSummary()).isNotBlank();
-        assertThat(r.getHousingGoal()).isNull();
-        assertThat(r.getDiscussedConditions()).isEmpty();
-        assertThat(r.getActionItems()).isEmpty();
-        assertThat(r.getNextSteps()).isNull();
+        assertThat(r.getResult()).isNotBlank();
+        assertThat(r.getMainConcerns()).isEmpty();
+        assertThat(r.getDiscussionPoints()).isEmpty();
+        assertThat(r.getRecommendations()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("배열 필드 자체가 없어도 빈 리스트로")
+    void missingArraysBecomeEmpty() {
+        when(gemini.generateJson(any(), any(), any())).thenReturn(
+                "{\"summary\":\"요약\",\"result\":\"결과\"}");
+
+        SummaryReport r = service.summarize(anyRequest());
+
+        assertThat(r.getMainConcerns()).isEmpty();
+        assertThat(r.getDiscussionPoints()).isEmpty();
+        assertThat(r.getRecommendations()).isEmpty();
     }
 
     @Test
     @DisplayName("summary 없음 → SUMMARY_AI_FAILED")
     void missingSummaryThrows() {
-        when(gemini.generateJson(any(), any(), any())).thenReturn("{\"housingGoal\":\"x\"}");
+        when(gemini.generateJson(any(), any(), any())).thenReturn("{\"result\":\"x\"}");
 
         assertThatThrownBy(() -> service.summarize(anyRequest()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.SUMMARY_AI_FAILED));
+    }
+
+    @Test
+    @DisplayName("result 없음 → SUMMARY_AI_FAILED")
+    void missingResultThrows() {
+        when(gemini.generateJson(any(), any(), any())).thenReturn("{\"summary\":\"x\"}");
+
+        assertThatThrownBy(() -> service.summarize(anyRequest()))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -120,10 +154,37 @@ class ChatSummaryServiceImplTest {
     }
 
     @Test
-    @DisplayName("responseSchema 는 summary 만 required")
+    @DisplayName("diagnosis 있는 요청도 파싱된다 (목표 진단 연계)")
+    void withDiagnosis() {
+        try {
+            SummaryRequest req = om.readValue("""
+                    {
+                      "reservationId": 12, "consultationType": "GENERAL", "category": "HOUSING",
+                      "consultInfo": { "currentAsset": 45000000, "monthlySaving": 900000, "targetDate": "2031-08" },
+                      "diagnosis": {
+                        "originalCondition": { "region": "서울 마포구", "housingType": "오피스텔", "transactionType": "전세", "area": "10~20평" },
+                        "recommendedCondition": { "region": "서울 마포구", "housingType": "단독·다가구", "transactionType": "전세", "area": "4~9평" },
+                        "targetDate": "2031-08", "recommendedMonthlySaving": 1100000
+                      },
+                      "messages": [ { "senderType": "USER", "content": "조정안이 궁금해요." } ]
+                    }
+                    """, SummaryRequest.class);
+            when(gemini.generateJson(any(), any(), any())).thenReturn(
+                    "{\"summary\":\"진단 결과를 함께 검토했습니다.\",\"result\":\"추천 조건으로 조정 시 목표 시점 유지가 가능합니다.\","
+                    + "\"mainConcerns\":[],\"discussionPoints\":[\"원래 조건과 추천 조건 비교\"],\"recommendations\":[\"추천 조건 검토\"]}");
+
+            SummaryReport r = service.summarize(req);
+            assertThat(r.getDiscussionPoints()).contains("원래 조건과 추천 조건 비교");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    @DisplayName("responseSchema 는 summary·result 만 required")
     void responseSchemaShape() {
         Map<String, Object> schema = ChatSummaryServiceImpl.responseSchema();
         assertThat(schema).containsEntry("type", "OBJECT");
-        assertThat(schema).containsEntry("required", List.of("summary"));
+        assertThat(schema).containsEntry("required", List.of("summary", "result"));
     }
 }
