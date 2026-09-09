@@ -1,6 +1,7 @@
 package com.team.independence.consultation.mapper;
 
 import com.team.independence.consultation.domain.ConsultationReservation;
+import com.team.independence.consultation.domain.ReportStatus;
 import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -37,6 +38,9 @@ public interface ConsultationMapper {
      */
     int updateStatusToCompleted(@Param("reservationId") Long reservationId);
 
-    /** 상담 종료 시 생성한 AI 요약 리포트(JSON 문자열)를 저장한다. */
-    int updateReportJson(@Param("reservationId") Long reservationId, @Param("reportJson") String reportJson);
+    /** 상담 종료 시(또는 재시도 시) AI 요약 리포트 생성 결과를 저장한다. 실패/무대화면 reportJson은 null. */
+    int updateReport(
+            @Param("reservationId") Long reservationId,
+            @Param("reportStatus") ReportStatus reportStatus,
+            @Param("reportJson") String reportJson);
 }

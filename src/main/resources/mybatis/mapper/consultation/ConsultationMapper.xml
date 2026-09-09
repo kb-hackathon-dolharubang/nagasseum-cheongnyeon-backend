@@ -18,6 +18,8 @@
         <result property="consultInfoJson" column="consult_info_json"/>
         <result property="diagnosisJson"   column="diagnosis_json"/>
         <result property="reportJson"      column="report_json"/>
+        <result property="reportStatus"    column="report_status"
+                javaType="com.team.independence.consultation.domain.ReportStatus"/>
         <result property="status"          column="status"
                 javaType="com.team.independence.consultation.domain.ConsultationStatus"/>
         <result property="createdAt"       column="created_at"/>
@@ -70,7 +72,8 @@
     <select id="findById" resultMap="reservationMap">
         SELECT reservation_id, user_id, counselor_id, consultation_type, category,
                reservation_date, reservation_time, request_message,
-               consult_info_json, diagnosis_json, report_json, status, created_at, ended_at
+               consult_info_json, diagnosis_json, report_json, report_status,
+               status, created_at, ended_at
         FROM consultation_reservation
         WHERE reservation_id = #{reservationId}
     </select>
@@ -90,9 +93,10 @@
            AND status IN ('RESERVED', 'IN_PROGRESS')
     </update>
 
-    <update id="updateReportJson">
+    <update id="updateReport">
         UPDATE consultation_reservation
-           SET report_json = #{reportJson}
+           SET report_status = #{reportStatus},
+               report_json   = #{reportJson}
          WHERE reservation_id = #{reservationId}
     </update>
 

@@ -37,4 +37,10 @@ public interface ConsultationService {
      * 리포트가 아직 없거나(생성 실패 포함) status는 FAILED, 있으면 COMPLETED로 5개 필드와 함께 내려준다.
      */
     ConsultationReportResponse getReport(Long reservationId);
+
+    /**
+     * 리포트 생성 실패(FAILED)한 상담만 재시도할 수 있다. NO_MESSAGES/COMPLETED/아직 종료 전이면
+     * INVALID_INPUT.
+     */
+    ConsultationReportResponse retryReport(Long reservationId);
 }

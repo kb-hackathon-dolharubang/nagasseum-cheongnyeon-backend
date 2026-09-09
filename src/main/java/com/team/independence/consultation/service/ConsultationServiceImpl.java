@@ -15,6 +15,7 @@ import com.team.independence.consultation.domain.ConsultationMessage;
 import com.team.independence.consultation.domain.ConsultationReservation;
 import com.team.independence.consultation.domain.ConsultationStatus;
 import com.team.independence.consultation.domain.ConsultationType;
+import com.team.independence.consultation.domain.ReportStatus;
 import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import com.team.independence.consultation.dto.ConsultationEndResponse;
 import com.team.independence.consultation.dto.ConsultationReportResponse;
@@ -129,33 +130,55 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Override
     @Transactional(readOnly = true)
     public ConsultationReportResponse getReport(Long reservationId) {
+        return toReportResponse(findReservation(reservationId));
+    }
+
+    @Override
+    @Transactional
+    public ConsultationReportResponse retryReport(Long reservationId) {
         ConsultationReservation reservation = findReservation(reservationId);
-        if (reservation.getReportJson() == null) {
-            return ConsultationReportResponse.builder().status("FAILED").build();
+        if (reservation.getReportStatus() != ReportStatus.FAILED) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "재생성이 필요한 상태가 아닙니다.");
         }
-        return parseReport(reservation.getReportJson());
+
+        generateReport(reservation);
+        return toReportResponse(consultationMapper.findById(reservationId));
     }
 
     /**
-     * 상담 종료 시 AI 요약 리포트를 동기로 생성해 저장한다. 요약할 메시지가 없으면 건너뛰고,
-     * AI 호출/파싱이 실패해도 예외를 던지지 않는다(상담 종료 자체를 막지 않기 위함) —
-     * 이 경우 report_json은 null로 남고, 리포트 화면에서는 FAILED로 노출된다.
+     * 상담 종료 시(또는 재시도 시) AI 요약 리포트를 동기로 생성해 저장한다. 메시지가 없으면
+     * NO_MESSAGES, AI 호출/파싱이 실패해도 예외를 던지지 않고 FAILED로 기록한다(상담 종료
+     * 자체를 막지 않기 위함 - 재시도는 별도 API로 가능).
      */
     private void generateReport(ConsultationReservation reservation) {
         List<ConsultationMessage> messages =
                 consultationMessageMapper.findByReservationId(reservation.getReservationId());
         if (messages.isEmpty()) {
+            consultationMapper.updateReport(reservation.getReservationId(), ReportStatus.NO_MESSAGES, null);
             return;
         }
 
         try {
             SummaryRequest request = buildSummaryRequest(reservation, messages);
             SummaryReport report = chatSummaryService.summarize(request);
-            consultationMapper.updateReportJson(
-                    reservation.getReservationId(), objectMapper.writeValueAsString(report));
+            consultationMapper.updateReport(
+                    reservation.getReservationId(),
+                    ReportStatus.COMPLETED,
+                    objectMapper.writeValueAsString(report));
         } catch (Exception e) {
             log.error("상담 리포트 생성 실패: reservationId={}", reservation.getReservationId(), e);
+            consultationMapper.updateReport(reservation.getReservationId(), ReportStatus.FAILED, null);
         }
+    }
+
+    private ConsultationReportResponse toReportResponse(ConsultationReservation reservation) {
+        ReportStatus reportStatus = reservation.getReportStatus();
+        if (reportStatus == ReportStatus.COMPLETED) {
+            return parseReport(reservation.getReportJson());
+        }
+        return ConsultationReportResponse.builder()
+                .status(reportStatus != null ? reportStatus.name() : ReportStatus.FAILED.name())
+                .build();
     }
 
     /**

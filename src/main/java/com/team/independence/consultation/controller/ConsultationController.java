@@ -57,4 +57,9 @@ public class ConsultationController {
     public ApiResponse<ConsultationReportResponse> getReport(@PathVariable Long reservationId) {
         return ApiResponse.ok(consultationService.getReport(reservationId));
     }
+
+    @PostMapping("/{reservationId}/report/retry")
+    public ApiResponse<ConsultationReportResponse> retryReport(@PathVariable Long reservationId) {
+        return ApiResponse.ok(consultationService.retryReport(reservationId));
+    }
 }
