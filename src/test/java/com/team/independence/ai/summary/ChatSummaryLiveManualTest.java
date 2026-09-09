@@ -23,7 +23,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 실제 Gemini 를 <b>딱 1번</b> 호출해 채팅 요약이 도는지 눈으로 확인하는 수동 테스트.
+ * 실제 Gemini 를 <b>딱 1번</b> 호출해 상담 요약이 도는지 눈으로 확인하는 수동 테스트.
  * 무료 티어 일일 한도(20/day)를 아끼기 위해 1건만 호출한다.
  *
  * <p>실행:
@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatSummaryLiveManualTest {
 
     @Test
-    @DisplayName("주거 상담 대화 1건 실제 요약")
+    @DisplayName("목표 진단 연계 상담 1건 실제 요약")
     void singleLiveCall() throws Exception {
         Map<String, String> env = readDotEnv();
         String apiKey = env.getOrDefault("GEMINI_API_KEY", "").trim();
@@ -62,23 +62,38 @@ class ChatSummaryLiveManualTest {
 
         String reqJson = """
                 {
-                  "roomTitle": "전세 자금 마련 상담",
+                  "reservationId": 12,
+                  "consultationType": "GENERAL",
+                  "category": "HOUSING",
+                  "preConsultationQuestion": "현재 자산으로 희망 조건을 유지할 수 있는지 궁금합니다.",
+                  "consultInfo": {
+                    "housingPreference": {
+                      "province": "서울특별시", "district": "마포구", "neighborhood": "서교동",
+                      "housingType": "OFFICETEL", "transactionType": "JEONSE",
+                      "areaRange": { "min": 10, "max": 20, "label": "10~20평" }
+                    },
+                    "currentAsset": 45000000,
+                    "monthlySaving": 900000,
+                    "targetDate": "2031-08",
+                    "loanPreference": "UNDECIDED"
+                  },
+                  "diagnosis": {
+                    "originalCondition": { "region": "서울 마포구", "housingType": "오피스텔", "transactionType": "전세", "area": "10~20평" },
+                    "recommendedCondition": { "region": "서울 마포구", "housingType": "단독·다가구", "transactionType": "전세", "area": "4~9평" },
+                    "targetDate": "2031-08",
+                    "recommendedMonthlySaving": 1100000
+                  },
                   "messages": [
-                    {"role":"COUNSELOR","text":"안녕하세요, 오늘은 어떤 주거 목표를 상담받고 싶으신가요?","sentAt":"2026-09-08T14:00:00"},
-                    {"role":"USER","text":"2년 안에 서울 근처에 전세로 독립하고 싶어요. 지금 보증금이 부족해서요.","sentAt":"2026-09-08T14:01:10"},
-                    {"role":"COUNSELOR","text":"희망하시는 보증금 수준과 지역이 어떻게 되실까요?","sentAt":"2026-09-08T14:01:40"},
-                    {"role":"USER","text":"1억 정도 생각하고 있고, 경기도 성남이나 하남 쪽이면 좋겠어요.","sentAt":"2026-09-08T14:02:20"},
-                    {"role":"COUNSELOR","text":"현재 매달 저축 가능한 금액은 어느 정도세요?","sentAt":"2026-09-08T14:02:50"},
-                    {"role":"USER","text":"월 80만원 정도는 꾸준히 넣을 수 있어요. 지금 모아둔 건 3천만원쯤 됩니다.","sentAt":"2026-09-08T14:03:30"},
-                    {"role":"COUNSELOR","text":"그러면 버팀목 전세자금대출 같은 정책 대출을 함께 활용하는 걸 검토해보면 좋겠습니다. 다음 상담 때 소득 요건을 같이 확인해볼게요.","sentAt":"2026-09-08T14:04:30"},
-                    {"role":"USER","text":"네 좋아요. 청약통장도 있는데 그것도 활용할 수 있을까요?","sentAt":"2026-09-08T14:05:00"},
-                    {"role":"COUNSELOR","text":"네, 청약통장 납입 내역을 다음에 가져와 주시면 같이 살펴보겠습니다.","sentAt":"2026-09-08T14:05:30"}
+                    { "senderType": "USER", "content": "현재 희망 조건을 그대로 유지하고 싶어요.", "createdAt": "2026-09-09T14:01:00" },
+                    { "senderType": "COUNSELOR", "content": "현재 자산과 월 저축 가능액을 기준으로 보면 목표 시점을 조금 조정하는 방법도 있습니다.", "createdAt": "2026-09-09T14:02:00" },
+                    { "senderType": "USER", "content": "저축액을 더 늘리는 건 부담이라, 조건을 조금 낮추는 쪽이 나을까요?", "createdAt": "2026-09-09T14:03:00" },
+                    { "senderType": "COUNSELOR", "content": "네, 추천 조건처럼 면적을 낮추면 목표 시점을 유지하면서 필요 자금이 줄어듭니다. 대출 활용 여부도 함께 보면 좋습니다.", "createdAt": "2026-09-09T14:04:00" }
                   ]
                 }
                 """;
         SummaryRequest req = om.readValue(reqJson, SummaryRequest.class);
 
-        System.out.println("\n================ 채팅 요약 · 실제 Gemini(" + model + ") (1회) ================\n");
+        System.out.println("\n================ 상담 요약 · 실제 Gemini(" + model + ") (1회) ================\n");
         System.out.println("--- INPUT ---");
         System.out.println(pretty.writeValueAsString(req));
         SummaryReport res = service.summarize(req);
@@ -87,6 +102,7 @@ class ChatSummaryLiveManualTest {
         System.out.println("\n================ 완료 ================\n");
 
         assertThat(res.getSummary()).isNotBlank();
+        assertThat(res.getResult()).isNotBlank();
     }
 
     private static Map<String, String> readDotEnv() throws IOException {
