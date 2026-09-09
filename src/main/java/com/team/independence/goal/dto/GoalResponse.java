@@ -11,6 +11,7 @@ public class GoalResponse {
     private Long goalId;
     private String status;
     private String regionCode;
+    private String dongCode;
     private String propertyType;
     private String tradeType;
     private Integer sizeMin;

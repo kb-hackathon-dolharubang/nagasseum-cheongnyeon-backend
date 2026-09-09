@@ -35,6 +35,8 @@ public class GoalDetailResponse {
     @Builder
     public static class Housing {
         private String regionCode;
+        /** 희망 읍면동 법정동코드. null이면 구 단위 전체. */
+        private String dongCode;
         private HousingType housingType;
         private DealType dealType;
         /** 희망 평수 범위 */

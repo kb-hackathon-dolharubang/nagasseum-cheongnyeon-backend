@@ -317,6 +317,7 @@ public class GoalServiceImpl implements GoalService {
 
         return GoalHousing.builder()
                 .regionCode(request.getRegionCode())
+                .dongCode(request.getDongCode())
                 .housingType(housingType)
                 .dealType(dealType)
                 .areaMin(request.getSizeMin())
@@ -334,6 +335,7 @@ public class GoalServiceImpl implements GoalService {
                 .goalId(goal.getId())
                 .status(goal.getStatus())
                 .regionCode(goalHousing.getRegionCode())
+                .dongCode(goalHousing.getDongCode())
                 .propertyType(goalHousing.getHousingType().name())
                 .tradeType(goalHousing.getDealType().name())
                 .sizeMin(goalHousing.getAreaMin())
@@ -607,6 +609,7 @@ public class GoalServiceImpl implements GoalService {
                 .goalType(goal.getGoalType())
                 .housing(GoalSummaryResponse.Housing.builder()
                         .regionName(regionName)
+                        .dongCode(goalHousing.getDongCode())
                         .housingType(goalHousing.getHousingType())
                         .dealType(goalHousing.getDealType())
                         .areaMin(goalHousing.getAreaMin())

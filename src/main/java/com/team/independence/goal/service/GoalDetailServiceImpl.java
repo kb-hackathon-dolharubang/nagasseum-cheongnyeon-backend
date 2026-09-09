@@ -76,6 +76,7 @@ public class GoalDetailServiceImpl implements GoalDetailService {
         }
         return GoalDetailResponse.Housing.builder()
                 .regionCode(housing.getRegionCode())
+                .dongCode(housing.getDongCode())
                 .housingType(housing.getHousingType())
                 .dealType(housing.getDealType())
                 .areaMin(housing.getAreaMin())
