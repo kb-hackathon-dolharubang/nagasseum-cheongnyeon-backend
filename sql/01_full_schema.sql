@@ -418,6 +418,7 @@ CREATE TABLE consultation_reservation (
     request_message   TEXT        NULL     COMMENT '예약 시 작성한 상담 희망 내용',
     consult_info_json JSON        NOT NULL COMMENT '이번 상담에 공유하기로 확정한 사용자 정보 스냅샷(원본 자산·목표 데이터 아님)',
     diagnosis_json    JSON        NULL     COMMENT '목표 진단 결과 스냅샷(GOAL_DIAGNOSIS 상담만 사용)',
+    report_json       JSON        NULL     COMMENT '상담 요약 리포트 스냅샷(AI 생성, 상담 종료 시 1회). 생성 실패 시 NULL',
     status            VARCHAR(20) NOT NULL DEFAULT 'RESERVED' COMMENT 'RESERVED / IN_PROGRESS / COMPLETED',
     created_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ended_at          DATETIME    NULL     COMMENT '상담 종료 시각(다음 작업의 종료 API에서 기록)',

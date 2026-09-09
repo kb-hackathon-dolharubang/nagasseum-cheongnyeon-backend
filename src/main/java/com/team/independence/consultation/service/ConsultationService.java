@@ -3,6 +3,7 @@ package com.team.independence.consultation.service;
 import com.team.independence.consultation.domain.ConsultationReservation;
 import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import com.team.independence.consultation.dto.ConsultationEndResponse;
+import com.team.independence.consultation.dto.ConsultationReportResponse;
 import com.team.independence.consultation.dto.ConsultationReservationCreateRequest;
 import com.team.independence.consultation.dto.ConsultationReservationResponse;
 import com.team.independence.consultation.dto.ConsultationUserReservationResponse;
@@ -30,4 +31,10 @@ public interface ConsultationService {
      * 상담이 없으면 CONSULTATION_NOT_FOUND, 이미 COMPLETED면 CONSULTATION_ALREADY_COMPLETED.
      */
     ConsultationEndResponse endConsultation(Long reservationId);
+
+    /**
+     * 상담 종료 시 생성된 AI 요약 리포트를 조회한다. 상담이 없으면 CONSULTATION_NOT_FOUND.
+     * 리포트가 아직 없거나(생성 실패 포함) status는 FAILED, 있으면 COMPLETED로 5개 필드와 함께 내려준다.
+     */
+    ConsultationReportResponse getReport(Long reservationId);
 }

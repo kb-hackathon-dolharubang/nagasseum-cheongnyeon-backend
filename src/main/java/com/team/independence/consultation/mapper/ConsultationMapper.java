@@ -36,4 +36,7 @@ public interface ConsultationMapper {
      * status를 조건에 함께 걸어 이미 COMPLETED면 0건이 된다(중복 종료 방지).
      */
     int updateStatusToCompleted(@Param("reservationId") Long reservationId);
+
+    /** 상담 종료 시 생성한 AI 요약 리포트(JSON 문자열)를 저장한다. */
+    int updateReportJson(@Param("reservationId") Long reservationId, @Param("reportJson") String reportJson);
 }
