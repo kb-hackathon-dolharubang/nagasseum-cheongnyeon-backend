@@ -44,6 +44,7 @@ public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServlet
     protected Filter[] getServletFilters() {
         CorsConfiguration corsConfig = new CorsConfiguration();
         corsConfig.addAllowedOrigin("http://localhost:5173");
+        corsConfig.addAllowedOrigin("https://nagasseum.vercel.app");
         corsConfig.addAllowedOrigin("https://www.nagasseum.com");
         corsConfig.addAllowedMethod("*");
         corsConfig.addAllowedHeader("*");
