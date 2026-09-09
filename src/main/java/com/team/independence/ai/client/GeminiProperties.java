@@ -28,12 +28,15 @@ public class GeminiProperties {
     @Value("${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}")
     private String baseUrl;
 
-    /** 읽기 타임아웃(ms). */
-    @Value("${GEMINI_TIMEOUT_MS:30000}")
+    /**
+     * 읽기 타임아웃(ms). gemini-3.6-flash 는 부하가 몰리면 응답이 30초를 넘길 때가 있어
+     * 느리지만 유효한 응답을 성급히 끊지 않도록 기본 60초로 둔다.
+     */
+    @Value("${GEMINI_TIMEOUT_MS:60000}")
     private int timeoutMs;
 
-    /** 429 / 5xx / 타임아웃 시 재시도 횟수(최초 시도 제외). */
-    @Value("${GEMINI_MAX_RETRIES:3}")
+    /** 429 / 5xx / 타임아웃 시 재시도 횟수(최초 시도 제외). 총 시도 = maxRetries + 1. */
+    @Value("${GEMINI_MAX_RETRIES:5}")
     private int maxRetries;
 
     /** 샘플링 온도. 심사 일관성을 위해 낮게. */

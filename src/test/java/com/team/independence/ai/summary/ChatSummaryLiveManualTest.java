@@ -47,7 +47,7 @@ class ChatSummaryLiveManualTest {
             @Override public String getApiKey() { return apiKey; }
             @Override public String getModel() { return model; }
             @Override public String getBaseUrl() { return "https://generativelanguage.googleapis.com/v1beta"; }
-            @Override public int getTimeoutMs() { return 30_000; }
+            @Override public int getTimeoutMs() { return 60_000; }
             @Override public int getMaxRetries() { return 5; }
             @Override public double getTemperature() { return 0.2; }
         };
