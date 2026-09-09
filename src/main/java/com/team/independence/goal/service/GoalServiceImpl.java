@@ -201,11 +201,30 @@ public class GoalServiceImpl implements GoalService {
             throw new BusinessException(ErrorCode.GOAL_ALREADY_EXISTS);
         }
 
+        // dongCode가 지정된 경우 동 단위 중앙값으로 P0 교정.
+        // 진단은 구 단위로 수행되므로 프론트가 보낸 targetRentMiddleAmount는 구 단위 중앙값이다.
+        // 동이 구 평균보다 비싸거나 싼 경우 MC 시뮬레이션 예측 범위가 실제와 어긋나므로 덮어쓴다.
+        long targetRentMiddleAmount = request.getTargetRentMiddleAmount();
+        if (goalHousing.getDongCode() != null) {
+            String dongName = regionQueryService.resolveDongName(goalHousing.getDongCode());
+            if (dongName != null) {
+                RentMedianResponse dongStats = rentMedianService.getMedian(
+                        buildMedianRequest(goalHousing.getRegionCode(), dongName,
+                                goalHousing.getHousingType(), goalHousing.getDealType(),
+                                goalHousing.getAreaMin(), goalHousing.getAreaMax(),
+                                goalHousing.getDepositMin(), goalHousing.getDepositMax(),
+                                goalHousing.getMonthlyRentMin(), goalHousing.getMonthlyRentMax()));
+                if (dongStats.getSampleCount() > 0) {
+                    targetRentMiddleAmount = dongStats.getDeposit().getMedian();
+                }
+            }
+        }
+
         Goal goal = Goal.builder()
                 .memberId(memberId)
                 .goalType(GOAL_TYPE_HOUSING)
                 .targetAmount(request.getTargetAmount())
-                .targetRentMiddleAmount(request.getTargetRentMiddleAmount())
+                .targetRentMiddleAmount(targetRentMiddleAmount)
                 .targetDate(request.getTargetDate().atDay(1))
                 .monthlySaving(request.getMonthlySavings())
                 .status(GOAL_STATUS_ACTIVE)
@@ -250,8 +269,24 @@ public class GoalServiceImpl implements GoalService {
 
         assetConnectionService.validateConnectedAccountExists(memberId);
 
+        long targetRentMiddleAmount = request.getTargetRentMiddleAmount();
+        if (goalHousing.getDongCode() != null) {
+            String dongName = regionQueryService.resolveDongName(goalHousing.getDongCode());
+            if (dongName != null) {
+                RentMedianResponse dongStats = rentMedianService.getMedian(
+                        buildMedianRequest(goalHousing.getRegionCode(), dongName,
+                                goalHousing.getHousingType(), goalHousing.getDealType(),
+                                goalHousing.getAreaMin(), goalHousing.getAreaMax(),
+                                goalHousing.getDepositMin(), goalHousing.getDepositMax(),
+                                goalHousing.getMonthlyRentMin(), goalHousing.getMonthlyRentMax()));
+                if (dongStats.getSampleCount() > 0) {
+                    targetRentMiddleAmount = dongStats.getDeposit().getMedian();
+                }
+            }
+        }
+
         goal.setTargetAmount(request.getTargetAmount());
-        goal.setTargetRentMiddleAmount(request.getTargetRentMiddleAmount());
+        goal.setTargetRentMiddleAmount(targetRentMiddleAmount);
         goal.setTargetDate(request.getTargetDate().atDay(1));
         goal.setMonthlySaving(request.getMonthlySavings());
         goalMapper.update(goal);
@@ -433,9 +468,12 @@ public class GoalServiceImpl implements GoalService {
     private GoalMarketTrendResponse computeMarketTrend(Goal goal, GoalHousing goalHousing) {
         String regionName = regionQueryService.resolveRegionName(goalHousing.getRegionCode());
 
-        // 사용자 조건에 맞춰 현재 실거래 데이터를 다시 조회
+        // 사용자 조건에 맞춰 현재 실거래 데이터를 다시 조회.
+        // dongCode가 있으면 동 단위 중앙값으로 비교해야 배너가 정확하다.
+        String dongName = regionQueryService.resolveDongName(goalHousing.getDongCode());
         RentMedianResponse currentStats = rentMedianService.getMedian(buildMedianRequest(
-                goalHousing.getRegionCode(), goalHousing.getHousingType(), goalHousing.getDealType(),
+                goalHousing.getRegionCode(), dongName,
+                goalHousing.getHousingType(), goalHousing.getDealType(),
                 goalHousing.getAreaMin(), goalHousing.getAreaMax(),
                 goalHousing.getDepositMin(), goalHousing.getDepositMax(),
                 goalHousing.getMonthlyRentMin(), goalHousing.getMonthlyRentMax()));
@@ -679,8 +717,17 @@ public class GoalServiceImpl implements GoalService {
     private RentMedianRequest buildMedianRequest(String regionCode, HousingType housingType, DealType dealType,
             int sizeMin, int sizeMax, long depositMin, long depositMax,
             Long monthlyRentMin, Long monthlyRentMax) {
+        return buildMedianRequest(regionCode, null, housingType, dealType,
+                sizeMin, sizeMax, depositMin, depositMax, monthlyRentMin, monthlyRentMax);
+    }
+
+    private RentMedianRequest buildMedianRequest(String regionCode, String dongName,
+            HousingType housingType, DealType dealType,
+            int sizeMin, int sizeMax, long depositMin, long depositMax,
+            Long monthlyRentMin, Long monthlyRentMax) {
         RentMedianRequest medianRequest = new RentMedianRequest();
         medianRequest.setRegionCode(regionCode);
+        medianRequest.setDongName(dongName);
         medianRequest.setHousingType(housingType);
         medianRequest.setDealType(dealType);
         medianRequest.setAreaMin(sizeMin);
