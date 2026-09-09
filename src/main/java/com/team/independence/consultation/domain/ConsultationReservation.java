@@ -28,6 +28,10 @@ public class ConsultationReservation {
     private String consultInfoJson;
     /** GOAL_DIAGNOSIS 상담일 때만 값이 있다(JSON 문자열) */
     private String diagnosisJson;
+    /** 상담 요약 리포트 스냅샷(JSON 문자열). 종료 시 1회 생성, 성공(COMPLETED)일 때만 값이 있다 */
+    private String reportJson;
+    /** COMPLETED / FAILED / NO_MESSAGES. 상담 종료 시 결정, 종료 전엔 null */
+    private ReportStatus reportStatus;
     private ConsultationStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime endedAt;

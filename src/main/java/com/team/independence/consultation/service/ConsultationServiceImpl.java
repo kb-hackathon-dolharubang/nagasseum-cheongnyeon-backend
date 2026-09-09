@@ -1,30 +1,45 @@
 package com.team.independence.consultation.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.team.independence.ai.summary.dto.SummaryReport;
+import com.team.independence.ai.summary.dto.SummaryRequest;
+import com.team.independence.ai.summary.service.ChatSummaryService;
 import com.team.independence.common.exception.BusinessException;
 import com.team.independence.common.exception.ErrorCode;
 import com.team.independence.consultation.domain.ConsultationCategory;
+import com.team.independence.consultation.domain.ConsultationMessage;
 import com.team.independence.consultation.domain.ConsultationReservation;
 import com.team.independence.consultation.domain.ConsultationStatus;
 import com.team.independence.consultation.domain.ConsultationType;
+import com.team.independence.consultation.domain.ReportStatus;
 import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import com.team.independence.consultation.dto.ConsultationEndResponse;
+import com.team.independence.consultation.dto.ConsultationReportResponse;
 import com.team.independence.consultation.dto.ConsultationReservationCreateRequest;
 import com.team.independence.consultation.dto.ConsultationReservationResponse;
 import com.team.independence.consultation.dto.ConsultationUserReservationResponse;
 import com.team.independence.consultation.mapper.ConsultationMapper;
+import com.team.independence.consultation.mapper.ConsultationMessageMapper;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConsultationServiceImpl implements ConsultationService {
 
     private final ConsultationMapper consultationMapper;
+    private final ConsultationMessageMapper consultationMessageMapper;
+    private final ChatSummaryService chatSummaryService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -103,11 +118,127 @@ public class ConsultationServiceImpl implements ConsultationService {
         consultationMapper.updateStatusToCompleted(reservationId);
         ConsultationReservation ended = consultationMapper.findById(reservationId);
 
+        generateReport(ended);
+
         return ConsultationEndResponse.builder()
                 .reservationId(ended.getReservationId())
                 .status(ended.getStatus().name())
                 .endedAt(ended.getEndedAt())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ConsultationReportResponse getReport(Long reservationId) {
+        return toReportResponse(findReservation(reservationId));
+    }
+
+    @Override
+    @Transactional
+    public ConsultationReportResponse retryReport(Long reservationId) {
+        ConsultationReservation reservation = findReservation(reservationId);
+        if (reservation.getReportStatus() != ReportStatus.FAILED) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "재생성이 필요한 상태가 아닙니다.");
+        }
+
+        generateReport(reservation);
+        return toReportResponse(consultationMapper.findById(reservationId));
+    }
+
+    /**
+     * 상담 종료 시(또는 재시도 시) AI 요약 리포트를 동기로 생성해 저장한다. 메시지가 없으면
+     * NO_MESSAGES, AI 호출/파싱이 실패해도 예외를 던지지 않고 FAILED로 기록한다(상담 종료
+     * 자체를 막지 않기 위함 - 재시도는 별도 API로 가능).
+     */
+    private void generateReport(ConsultationReservation reservation) {
+        List<ConsultationMessage> messages =
+                consultationMessageMapper.findByReservationId(reservation.getReservationId());
+        if (messages.isEmpty()) {
+            consultationMapper.updateReport(reservation.getReservationId(), ReportStatus.NO_MESSAGES, null);
+            return;
+        }
+
+        try {
+            SummaryRequest request = buildSummaryRequest(reservation, messages);
+            SummaryReport report = chatSummaryService.summarize(request);
+            consultationMapper.updateReport(
+                    reservation.getReservationId(),
+                    ReportStatus.COMPLETED,
+                    objectMapper.writeValueAsString(report));
+        } catch (Exception e) {
+            log.error("상담 리포트 생성 실패: reservationId={}", reservation.getReservationId(), e);
+            consultationMapper.updateReport(reservation.getReservationId(), ReportStatus.FAILED, null);
+        }
+    }
+
+    private ConsultationReportResponse toReportResponse(ConsultationReservation reservation) {
+        ReportStatus reportStatus = reservation.getReportStatus();
+        if (reportStatus == ReportStatus.COMPLETED) {
+            return parseReport(reservation.getReportJson());
+        }
+        return ConsultationReportResponse.builder()
+                .status(reportStatus != null ? reportStatus.name() : ReportStatus.FAILED.name())
+                .build();
+    }
+
+    /**
+     * consultInfoJson/diagnosisJson은 예약 생성 시 프론트가 보낸 것을 그대로 저장해둔 스냅샷이라
+     * SummaryRequest.ConsultInfo/Diagnosis와 필드가 이미 동일하다 - 파싱해서 그대로 끼워 넣는다.
+     * SummaryRequest는 builder/setter가 없어 @RequestBody와 같은 경로(ObjectMapper 역직렬화)로만
+     * 만들 수 있다.
+     */
+    private SummaryRequest buildSummaryRequest(
+            ConsultationReservation reservation, List<ConsultationMessage> messages)
+            throws JsonProcessingException {
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("reservationId", reservation.getReservationId());
+        root.put("consultationType", reservation.getConsultationType().name());
+        root.put("category", reservation.getCategory().name());
+        root.put("preConsultationQuestion", reservation.getRequestMessage());
+        root.set("consultInfo", objectMapper.readTree(reservation.getConsultInfoJson()));
+        if (reservation.getDiagnosisJson() != null) {
+            root.set("diagnosis", objectMapper.readTree(reservation.getDiagnosisJson()));
+        }
+
+        ArrayNode messagesNode = root.putArray("messages");
+        for (ConsultationMessage message : messages) {
+            ObjectNode messageNode = messagesNode.addObject();
+            messageNode.put("senderType", message.getSenderType().name());
+            messageNode.put("content", message.getContent());
+            if (message.getCreatedAt() != null) {
+                messageNode.put("createdAt", message.getCreatedAt().toString());
+            }
+        }
+
+        return objectMapper.treeToValue(root, SummaryRequest.class);
+    }
+
+    /** ChatSummaryServiceImpl.parse()와 같은 방식 - SummaryReport는 builder만 있어 readValue로 바로 못 만든다. */
+    private ConsultationReportResponse parseReport(String reportJson) {
+        try {
+            JsonNode root = objectMapper.readTree(reportJson);
+            return ConsultationReportResponse.builder()
+                    .status("COMPLETED")
+                    .summary(root.path("summary").asText(null))
+                    .mainConcerns(toStringList(root.path("mainConcerns")))
+                    .discussionPoints(toStringList(root.path("discussionPoints")))
+                    .result(root.path("result").asText(null))
+                    .recommendations(toStringList(root.path("recommendations")))
+                    .build();
+        } catch (JsonProcessingException e) {
+            log.error("저장된 리포트 파싱 실패: {}", e.getMessage());
+            return ConsultationReportResponse.builder().status("FAILED").build();
+        }
+    }
+
+    private static List<String> toStringList(JsonNode node) {
+        List<String> result = new ArrayList<>();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                result.add(item.asText());
+            }
+        }
+        return result;
     }
 
     private String toJson(Object obj) {

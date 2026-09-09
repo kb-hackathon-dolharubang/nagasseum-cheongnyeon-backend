@@ -3,6 +3,7 @@ package com.team.independence.consultation.controller;
 import com.team.independence.common.response.ApiResponse;
 import com.team.independence.consultation.dto.ConsultationCounselorReservationResponse;
 import com.team.independence.consultation.dto.ConsultationEndResponse;
+import com.team.independence.consultation.dto.ConsultationReportResponse;
 import com.team.independence.consultation.dto.ConsultationReservationCreateRequest;
 import com.team.independence.consultation.dto.ConsultationReservationResponse;
 import com.team.independence.consultation.dto.ConsultationUserReservationResponse;
@@ -50,5 +51,15 @@ public class ConsultationController {
     @PatchMapping("/{reservationId}/end")
     public ApiResponse<ConsultationEndResponse> endConsultation(@PathVariable Long reservationId) {
         return ApiResponse.ok(consultationService.endConsultation(reservationId));
+    }
+
+    @GetMapping("/{reservationId}/report")
+    public ApiResponse<ConsultationReportResponse> getReport(@PathVariable Long reservationId) {
+        return ApiResponse.ok(consultationService.getReport(reservationId));
+    }
+
+    @PostMapping("/{reservationId}/report/retry")
+    public ApiResponse<ConsultationReportResponse> retryReport(@PathVariable Long reservationId) {
+        return ApiResponse.ok(consultationService.retryReport(reservationId));
     }
 }
