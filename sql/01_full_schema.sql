@@ -101,7 +101,7 @@ CREATE TABLE rent_transaction (
     jibun          VARCHAR(30)   NULL     COMMENT '지번(단독/다가구 미제공)',
     complex_name   VARCHAR(100)  NULL     COMMENT '단지명(단독/다가구 미제공)',
     area           DECIMAL(10,2) NOT NULL COMMENT '전용면적 / 연면적(단독다가구)',
-    deal_type      VARCHAR(10)   NOT NULL COMMENT 'JEONSE / WOLSE (monthly_rent=0이면 JEONSE)',
+    deal_type      VARCHAR(10)   NOT NULL COMMENT 'JEONSE / WOLSE / TRADE',
     deposit        BIGINT        NOT NULL DEFAULT 0 COMMENT '보증금(원)',
     monthly_rent   BIGINT        NOT NULL DEFAULT 0 COMMENT '월세(원, 전세=0)',
     floor          INT           NULL     COMMENT '층(단독/다가구 미제공)',
@@ -131,18 +131,19 @@ CREATE TABLE rent_transaction (
 
 -- 수집 이력
 -- 최초 수집/증분 수집을 코드에서 분기하지 않고, 조합별 성공 여부로 판단하기 위한 테이블.
--- 한 번 쌓인 이력은 지우지 않는다(지역 268 × 4종 × 누적 개월수만큼 늘어난다).
+-- 한 번 쌓인 이력은 지우지 않는다(지역 268 × 4종 × 2범주 × 누적 개월수만큼 늘어난다).
 CREATE TABLE rent_sync_log (
     region_code   VARCHAR(5)  NOT NULL COMMENT '지역코드(FK 미설정: 이력은 region 삭제와 무관하게 보존)',
     deal_ym       VARCHAR(6)  NOT NULL COMMENT '계약년월 YYYYMM',
     housing_type  VARCHAR(20) NOT NULL COMMENT 'APT / ROW_HOUSE / OFFICETEL / DETACHED',
+    deal_category VARCHAR(5)  NOT NULL DEFAULT 'RENT' COMMENT 'RENT(전월세) / TRADE(매매)',
     is_success    BOOLEAN     NOT NULL COMMENT '수집 성공 여부(false면 다음 실행에서 재시도)',
     inserted_cnt  INT         NOT NULL DEFAULT 0 COMMENT '마지막 적재 건수',
     created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '최초 수집 시각',
     updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
                               ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 수집 시각',
-    PRIMARY KEY (region_code, deal_ym, housing_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='지역-연월-유형 단위 수집 이력';
+    PRIMARY KEY (region_code, deal_ym, housing_type, deal_category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='지역-연월-유형-범주 단위 수집 이력';
 
 -- =====================================================================
 -- [회원 종속]
@@ -386,7 +387,7 @@ CREATE TABLE goal_housing (
     goal_id          BIGINT      NOT NULL COMMENT 'goal FK(1:1)',
     region_code      VARCHAR(5)  NOT NULL COMMENT '희망 지역 FK → region.code',
     housing_type     VARCHAR(20) NOT NULL COMMENT '희망 주거 형태(아파트/오피스텔/연립다세대/단독다가구)',
-    deal_type        VARCHAR(10) NOT NULL COMMENT '희망 거래 유형(전세/월세)',
+    deal_type        VARCHAR(10) NOT NULL COMMENT '희망 거래 유형(전세/월세/매매)',
     area_min         INT         NOT NULL COMMENT '희망 최소 평수',
     area_max         INT         NOT NULL COMMENT '희망 최대 평수',
     deposit_min      BIGINT      NOT NULL COMMENT '희망 최소 보증금',

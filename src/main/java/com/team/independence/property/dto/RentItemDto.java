@@ -28,6 +28,9 @@ public class RentItemDto {
     private String mhouseNm;      // 연립다세대명
     // 단독다가구는 단지명 없음
 
+    /** 매매 전용 거래금액(만원). 전월세 API에는 없고 전월세 API의 deposit에 해당하는 필드. */
+    private String dealAmount;
+
     /** 4종 중 어느 타입이든 단지명 반환 */
     public String getComplexName() {
         if (aptNm != null && !aptNm.isBlank()) return aptNm.trim();
