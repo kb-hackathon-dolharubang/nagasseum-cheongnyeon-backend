@@ -31,13 +31,23 @@
         </foreach>
     </insert>
 
-    <!-- idx_rent_reload (region_code, deal_ym, housing_type)를 그대로 타는 구간 삭제.
-         재적재 트랜잭션의 첫 단계이며, 인덱스가 없으면 유닛마다 풀스캔이 된다. -->
+    <!-- 전월세 구간 삭제. idx_rent_reload(region_code, deal_ym, housing_type) 사용.
+         TRADE 행은 건드리지 않아 전월세·매매 재적재가 서로 독립적으로 동작한다. -->
     <delete id="deleteByUnit">
         DELETE FROM rent_transaction
          WHERE region_code = #{regionCode}
            AND deal_ym = #{dealYm}
            AND housing_type = #{housingType}
+           AND deal_type IN ('JEONSE', 'WOLSE')
+    </delete>
+
+    <!-- 매매 구간 삭제. JEONSE·WOLSE 행은 건드리지 않는다. -->
+    <delete id="deleteTradeByUnit">
+        DELETE FROM rent_transaction
+         WHERE region_code = #{regionCode}
+           AND deal_ym = #{dealYm}
+           AND housing_type = #{housingType}
+           AND deal_type = 'TRADE'
     </delete>
 
     <!-- walk-forward 백테스팅 조합 탐색: 기간 내 거래 월 수가 minDistinctMonths 이상인 조합만 반환.

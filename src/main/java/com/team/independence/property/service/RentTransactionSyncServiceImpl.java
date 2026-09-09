@@ -43,11 +43,18 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
     private final XmlMapper xmlMapper = new XmlMapper();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final Map<HousingType, String> API_URLS = Map.of(
-        HousingType.APT, "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent",
+    private static final Map<HousingType, String> RENT_API_URLS = Map.of(
+        HousingType.APT,       "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent",
         HousingType.OFFICETEL, "https://apis.data.go.kr/1613000/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent",
         HousingType.ROW_HOUSE, "https://apis.data.go.kr/1613000/RTMSDataSvcRHRent/getRTMSDataSvcRHRent",
-        HousingType.DETACHED, "https://apis.data.go.kr/1613000/RTMSDataSvcSHRent/getRTMSDataSvcSHRent"
+        HousingType.DETACHED,  "https://apis.data.go.kr/1613000/RTMSDataSvcSHRent/getRTMSDataSvcSHRent"
+    );
+
+    private static final Map<HousingType, String> TRADE_API_URLS = Map.of(
+        HousingType.APT,       "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev",
+        HousingType.OFFICETEL, "https://apis.data.go.kr/1613000/RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade",
+        HousingType.ROW_HOUSE, "https://apis.data.go.kr/1613000/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade",
+        HousingType.DETACHED,  "https://apis.data.go.kr/1613000/RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade"
     );
 
     private static final DateTimeFormatter DEAL_YM = DateTimeFormatter.ofPattern("yyyyMM");
@@ -84,22 +91,24 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
 
             for (String regionCode : regionCodes) {
                 for (HousingType housingType : HousingType.values()) {
+                    for (boolean isTrade : new boolean[]{false, true}) {
 
-                    if (!alwaysResync && isCollected(history, regionCode, dealYm, housingType)) {
-                        skipped++;
-                        continue;
-                    }
+                        if (!alwaysResync && isCollected(history, regionCode, dealYm, housingType, isTrade)) {
+                            skipped++;
+                            continue;
+                        }
 
-                    try {
-                        collectAndSync(regionCode, dealYm, housingType);
-                        succeeded++;
-                    } catch (Exception e) {
-                        // 한 유닛이 실패해도 나머지는 계속 진행한다.
-                        // 실패 이력은 롤백된 트랜잭션 바깥인 여기서 남겨야 살아남는다.
-                        failed++;
-                        log.error("[국토부] 유닛 동기화 실패 - regionCode={}, dealYm={}, housingType={}, error={}",
-                            regionCode, dealYm, housingType, e.getMessage());
-                        markFailed(regionCode, dealYm, housingType);
+                        try {
+                            collectAndSyncInternal(regionCode, dealYm, housingType, isTrade);
+                            succeeded++;
+                        } catch (Exception e) {
+                            // 한 유닛이 실패해도 나머지는 계속 진행한다.
+                            // 실패 이력은 롤백된 트랜잭션 바깥인 여기서 남겨야 살아남는다.
+                            failed++;
+                            log.error("[국토부] 유닛 동기화 실패 - regionCode={}, dealYm={}, housingType={}, isTrade={}, error={}",
+                                regionCode, dealYm, housingType, isTrade, e.getMessage());
+                            markFailed(regionCode, dealYm, housingType, isTrade);
+                        }
                     }
                 }
             }
@@ -110,15 +119,26 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
 
     @Override
     public void collectAndSync(String regionCode, String dealYm, HousingType housingType) {
-        String baseUrl = API_URLS.get(housingType);
+        collectAndSyncInternal(regionCode, dealYm, housingType, false);
+    }
+
+    @Override
+    public void collectAndSyncTrade(String regionCode, String dealYm, HousingType housingType) {
+        collectAndSyncInternal(regionCode, dealYm, housingType, true);
+    }
+
+    private void collectAndSyncInternal(String regionCode, String dealYm, HousingType housingType,
+                                        boolean isTrade) {
+        Map<HousingType, String> urlMap = isTrade ? TRADE_API_URLS : RENT_API_URLS;
+        String baseUrl = urlMap.get(housingType);
         if (baseUrl == null) {
             throw new IllegalArgumentException("지원하지 않는 주택유형: " + housingType);
         }
 
         // HTTP 호출과 파싱은 트랜잭션 밖에서 모두 끝내고, 결과 리스트만 넘긴다.
-        List<RentTransaction> items = fetchAndParse(baseUrl, housingType, regionCode, dealYm);
+        List<RentTransaction> items = fetchAndParse(baseUrl, housingType, regionCode, dealYm, isTrade);
 
-        rentTransactionUnitSyncService.sync(regionCode, dealYm, housingType, items);
+        rentTransactionUnitSyncService.sync(regionCode, dealYm, housingType, items, isTrade);
     }
 
     // ===== 수집 =====
@@ -130,14 +150,14 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
      * 그래서 상한을 넘기면 부분 결과를 반환하지 않고 예외를 던져 유닛 자체를 실패시킨다.
      */
     private List<RentTransaction> fetchAndParse(String baseUrl, HousingType housingType,
-                                                String regionCode, String dealYm) {
+                                                String regionCode, String dealYm, boolean isTrade) {
         List<RentTransaction> result = new ArrayList<>();
 
         for (int pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
             RentApiResponse response = fetchPage(baseUrl, regionCode, dealYm, pageNo);
 
             for (RentItemDto dto : itemsOf(response)) {
-                result.add(toRentTransaction(dto, housingType, regionCode));
+                result.add(toRentTransaction(dto, housingType, regionCode, isTrade));
             }
 
             int totalCount = totalCountOf(response);
@@ -207,48 +227,67 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
     private Map<String, RentSyncLog> loadHistory() {
         Map<String, RentSyncLog> history = new HashMap<>();
         for (RentSyncLog syncLog : rentSyncLogMapper.findAll()) {
-            history.put(historyKey(syncLog.getRegionCode(), syncLog.getDealYm(), syncLog.getHousingType()),
-                syncLog);
+            history.put(historyKey(syncLog.getRegionCode(), syncLog.getDealYm(),
+                    syncLog.getHousingType(), "TRADE".equals(syncLog.getDealCategory())), syncLog);
         }
         return history;
     }
 
     private boolean isCollected(Map<String, RentSyncLog> history,
-                                String regionCode, String dealYm, HousingType housingType) {
-        RentSyncLog syncLog = history.get(historyKey(regionCode, dealYm, housingType));
+                                String regionCode, String dealYm, HousingType housingType,
+                                boolean isTrade) {
+        RentSyncLog syncLog = history.get(historyKey(regionCode, dealYm, housingType, isTrade));
         return syncLog != null && Boolean.TRUE.equals(syncLog.getIsSuccess());
     }
 
-    private String historyKey(String regionCode, String dealYm, HousingType housingType) {
-        return regionCode + "|" + dealYm + "|" + housingType.name();
+    private String historyKey(String regionCode, String dealYm, HousingType housingType,
+                              boolean isTrade) {
+        return regionCode + "|" + dealYm + "|" + housingType.name() + "|" + (isTrade ? "TRADE" : "RENT");
     }
 
     /** 실패 기록마저 실패해도 전체 순회는 멈추지 않는다(다음 실행에서 이력 없음 → 재시도 대상). */
-    private void markFailed(String regionCode, String dealYm, HousingType housingType) {
+    private void markFailed(String regionCode, String dealYm, HousingType housingType,
+                            boolean isTrade) {
         try {
             rentSyncLogMapper.upsert(RentSyncLog.builder()
                 .regionCode(regionCode)
                 .dealYm(dealYm)
                 .housingType(housingType)
+                .dealCategory(isTrade ? "TRADE" : "RENT")
                 .isSuccess(false)
                 .insertedCnt(0)
                 .build());
         } catch (Exception e) {
-            log.error("[국토부] 실패 이력 기록 실패 - regionCode={}, dealYm={}, housingType={}, error={}",
-                regionCode, dealYm, housingType, e.getMessage());
+            log.error("[국토부] 실패 이력 기록 실패 - regionCode={}, dealYm={}, housingType={}, isTrade={}, error={}",
+                regionCode, dealYm, housingType, isTrade, e.getMessage());
         }
     }
 
     // ===== 변환 =====
 
     /**
-     * RentItemDto → RentTransaction 변환
+     * RentItemDto → RentTransaction 변환.
      * API 응답 필드명/형식이 DB 컬럼과 달라서 여기서 정제한다.
+     *
+     * <p>매매(isTrade=true): dealAmount(거래금액) → deposit, monthly_rent=0, deal_type=TRADE.
+     * 전월세(isTrade=false): deposit(보증금), monthlyRent(월세금액) → deal_type 파생.
      */
-    private RentTransaction toRentTransaction(RentItemDto dto, HousingType housingType, String regionCode) {
-        // "24,000" 형태의 금액 → 콤마 제거 후 원 단위로 변환 (국토부는 만원 단위로 반환)
-        long deposit = parseLong(parseAmount(dto.getDeposit())) * 10_000;
-        long monthlyRent = parseLong(parseAmount(dto.getMonthlyRent())) * 10_000;
+    private RentTransaction toRentTransaction(RentItemDto dto, HousingType housingType,
+                                              String regionCode, boolean isTrade) {
+        // 국토부는 만원 단위로 반환 → 원 단위로 변환
+        final long deposit;
+        final long monthlyRent;
+        final DealType dealType;
+
+        if (isTrade) {
+            deposit = parseLong(parseAmount(dto.getDealAmount())) * 10_000;
+            monthlyRent = 0;
+            dealType = DealType.TRADE;
+        } else {
+            deposit = parseLong(parseAmount(dto.getDeposit())) * 10_000;
+            monthlyRent = parseLong(parseAmount(dto.getMonthlyRent())) * 10_000;
+            dealType = DealType.fromMonthlyRent(monthlyRent);
+        }
 
         // dealYear("2015") + dealMonth("12") → dealYm("201512")
         String dealYm = dto.getDealYear().trim()
@@ -265,16 +304,16 @@ public class RentTransactionSyncServiceImpl implements RentTransactionSyncServic
             .jibun(trim(dto.getJibun()))
             .complexName(dto.getComplexName())          // 4종 단지명 헬퍼로 통일
             .area(area != null ? new BigDecimal(area) : BigDecimal.ZERO)
-            .dealType(DealType.from(monthlyRent))
+            .dealType(dealType)
             .deposit(deposit)
             .monthlyRent(monthlyRent)
             .floor(parseInteger(dto.getFloor()))
             .buildYear(parseInteger(dto.getBuildYear()))
             .dealYm(dealYm)
             .dealDay(trim(dto.getDealDay()))
-            .contractType(trim(dto.getContractType()))
-            .contractTerm(trim(dto.getContractTerm()))
-            .json(toJson(dto))                          // DTO를 JSON으로 직렬화해 원본 보존
+            .contractType(isTrade ? null : trim(dto.getContractType()))  // 매매는 계약유형 없음
+            .contractTerm(isTrade ? null : trim(dto.getContractTerm()))  // 매매는 계약기간 없음
+            .json(toJson(dto))                                           // 원본 보존
             .build();
     }
 

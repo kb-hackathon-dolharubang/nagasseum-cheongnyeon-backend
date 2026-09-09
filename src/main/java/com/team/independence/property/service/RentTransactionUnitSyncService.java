@@ -5,7 +5,7 @@ import com.team.independence.property.domain.RentTransaction;
 import java.util.List;
 
 /**
- * (지역, 연월, 주택유형) 유닛 하나를 전량 재적재하는 트랜잭션 경계.
+ * (지역, 연월, 주택유형, 거래범주) 유닛 하나를 전량 재적재하는 트랜잭션 경계.
  *
  * <p>국토부 API 응답은 해당 구간의 완전한 정답지이므로, 구간을 통째로 비우고 다시 채운다.
  * 행 단위 식별자(일련번호·호수·신고시각)가 없어 신규/정정을 구분할 수 없기 때문이다.
@@ -17,7 +17,9 @@ import java.util.List;
 public interface RentTransactionUnitSyncService {
 
     /**
-     * @param items 이미 파싱이 끝난 거래 목록. HTTP 호출은 트랜잭션 밖에서 끝내고 결과만 넘긴다.
+     * @param items    이미 파싱이 끝난 거래 목록. HTTP 호출은 트랜잭션 밖에서 끝내고 결과만 넘긴다.
+     * @param isTrade  true면 매매 유닛(TRADE 행만 삭제·적재), false면 전월세 유닛(JEONSE+WOLSE 행).
      */
-    void sync(String regionCode, String dealYm, HousingType housingType, List<RentTransaction> items);
+    void sync(String regionCode, String dealYm, HousingType housingType,
+              List<RentTransaction> items, boolean isTrade);
 }

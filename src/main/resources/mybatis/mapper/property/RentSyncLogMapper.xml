@@ -5,15 +5,15 @@
 <mapper namespace="com.team.independence.property.mapper.RentSyncLogMapper">
 
     <select id="findAll" resultType="com.team.independence.property.domain.RentSyncLog">
-        SELECT region_code, deal_ym, housing_type, is_success, inserted_cnt
+        SELECT region_code, deal_ym, housing_type, deal_category, is_success, inserted_cnt
           FROM rent_sync_log
     </select>
 
     <insert id="upsert" parameterType="com.team.independence.property.domain.RentSyncLog">
         INSERT INTO rent_sync_log (
-            region_code, deal_ym, housing_type, is_success, inserted_cnt
+            region_code, deal_ym, housing_type, deal_category, is_success, inserted_cnt
         ) VALUES (
-            #{regionCode}, #{dealYm}, #{housingType}, #{isSuccess}, #{insertedCnt}
+            #{regionCode}, #{dealYm}, #{housingType}, #{dealCategory}, #{isSuccess}, #{insertedCnt}
         )
         ON DUPLICATE KEY UPDATE
             is_success   = VALUES(is_success),
