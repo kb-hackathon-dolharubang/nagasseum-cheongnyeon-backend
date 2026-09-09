@@ -17,6 +17,8 @@ import lombok.Setter;
 public class GoalHousing {
     private Long goalId;
     private String regionCode;
+    /** 희망 읍면동 법정동코드. null이면 regionCode가 가리키는 구 단위 전체. */
+    private String dongCode;
     private HousingType housingType;
     private DealType dealType;
     private Integer areaMin;

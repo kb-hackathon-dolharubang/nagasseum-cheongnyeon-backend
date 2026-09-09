@@ -17,15 +17,16 @@
         <result property="depositMax"      column="deposit_max"/>
         <result property="monthlyRentMin"  column="monthly_rent_min"/>
         <result property="monthlyRentMax"  column="monthly_rent_max"/>
+        <result property="dongCode"        column="dong_code"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.team.independence.goal.domain.GoalHousing">
         INSERT INTO goal_housing (
-            goal_id, region_code, housing_type, deal_type,
+            goal_id, region_code, dong_code, housing_type, deal_type,
             area_min, area_max, deposit_min, deposit_max,
             monthly_rent_min, monthly_rent_max
         ) VALUES (
-            #{goalId}, #{regionCode}, #{housingType}, #{dealType},
+            #{goalId}, #{regionCode}, #{dongCode}, #{housingType}, #{dealType},
             #{areaMin}, #{areaMax}, #{depositMin}, #{depositMax},
             #{monthlyRentMin}, #{monthlyRentMax}
         )
@@ -34,6 +35,7 @@
     <update id="update" parameterType="com.team.independence.goal.domain.GoalHousing">
         UPDATE goal_housing
            SET region_code      = #{regionCode},
+               dong_code        = #{dongCode},
                housing_type     = #{housingType},
                deal_type        = #{dealType},
                area_min         = #{areaMin},
@@ -46,7 +48,7 @@
     </update>
 
     <select id="findByGoalId" resultMap="goalHousingMap">
-        SELECT goal_id, region_code, housing_type, deal_type,
+        SELECT goal_id, region_code, dong_code, housing_type, deal_type,
                area_min, area_max, deposit_min, deposit_max,
                monthly_rent_min, monthly_rent_max
           FROM goal_housing

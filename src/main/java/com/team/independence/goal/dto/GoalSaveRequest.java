@@ -21,6 +21,9 @@ public class GoalSaveRequest {
     @NotBlank
     private String regionCode;
 
+    /** 희망 읍면동 법정동코드. 미지정 시 null → regionCode가 가리키는 구 단위 전체 */
+    private String dongCode;
+
     @NotBlank
     @Pattern(regexp = "APT|ROW_HOUSE|OFFICETEL|DETACHED")
     private String propertyType;

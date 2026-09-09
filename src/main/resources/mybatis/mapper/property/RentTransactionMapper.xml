@@ -118,6 +118,9 @@
                AND area         BETWEEN #{areaMinSqm} AND #{areaMaxSqm}
                AND deposit      BETWEEN #{request.depositMin} AND #{request.depositMax}
                AND deposit &gt; 0
+            <if test="request.dongName != null">
+               AND dong_name = #{request.dongName}
+            </if>
             <if test="request.usesMonthlyRentFilter() and request.monthlyRentMin != null">
                AND monthly_rent &gt;= #{request.monthlyRentMin}
             </if>

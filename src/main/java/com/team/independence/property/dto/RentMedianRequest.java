@@ -26,6 +26,9 @@ public class RentMedianRequest {
     @NotBlank(message = "지역 코드는 필수입니다.")
     private String regionCode;
 
+    /** 읍면동명. null이면 구 단위 전체 집계. 서비스 내부에서만 세팅하며 외부 입력값이 아니다. */
+    private String dongName;
+
     /** 주거 형태 */
     @NotNull(message = "주거 형태는 필수입니다.")
     private HousingType housingType;

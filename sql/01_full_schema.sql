@@ -36,6 +36,16 @@ CREATE TABLE region (
     PRIMARY KEY (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='지역 코드 마스터(시군구)';
 
+CREATE TABLE region_dong (
+    code         VARCHAR(10)  NOT NULL COMMENT '법정동코드 10자리(읍면동 단위)',
+    sigungu_code VARCHAR(5)   NOT NULL COMMENT '시군구 코드 → region.code',
+    dong_name    VARCHAR(50)  NOT NULL COMMENT '읍면동명(MOLIT API umdNm과 매칭)',
+    full_name    VARCHAR(100) NOT NULL COMMENT '전체 지명(시도+시군구+읍면동)',
+    PRIMARY KEY (code),
+    KEY idx_region_dong_sigungu (sigungu_code),
+    CONSTRAINT fk_region_dong_sigungu FOREIGN KEY (sigungu_code) REFERENCES region (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='법정동 읍면동 마스터';
+
 -- 연동 가능 기관 마스터 --------------------------------------------------
 CREATE TABLE institution (
     code               VARCHAR(10)  NOT NULL COMMENT 'CODEF 기관코드(요청의 organization)',
@@ -383,8 +393,11 @@ CREATE TABLE goal_housing (
     deposit_max      BIGINT      NOT NULL COMMENT '희망 최대 보증금',
     monthly_rent_min BIGINT      NOT NULL DEFAULT 0 COMMENT '희망 최소 월세(전세면 0)',
     monthly_rent_max BIGINT      NOT NULL DEFAULT 0 COMMENT '희망 최대 월세(전세면 0)',
+    dong_code        VARCHAR(10)          COMMENT '희망 읍면동 법정동코드(NULL이면 구 단위 전체)',
     PRIMARY KEY (goal_id),
     KEY idx_goal_housing_region (region_code),
+    KEY idx_goal_housing_dong (dong_code),
+    CONSTRAINT fk_goal_housing_dong   FOREIGN KEY (dong_code)   REFERENCES region_dong (code),
     CONSTRAINT fk_goal_housing_goal   FOREIGN KEY (goal_id)     REFERENCES goal (id),
     CONSTRAINT fk_goal_housing_region FOREIGN KEY (region_code) REFERENCES region (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='주거 목표 상세(단일 선택)';
